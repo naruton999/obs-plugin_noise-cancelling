@@ -4,8 +4,8 @@
 
 #include <obs-module.h>
 #include <plugin-support.h>
+#include <util/threading.h>
 
-#include <stdatomic.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,10 +36,10 @@ struct deepfilter_ctx {
 
 	struct df_channel channels[DF_CHANNELS];
 
-	_Atomic int atten_lim_x100;
-	_Atomic int post_filter_beta_x1000;
-	int applied_atten_lim_x100;
-	int applied_post_filter_beta_x1000;
+	volatile long atten_lim_x100;
+	volatile long post_filter_beta_x1000;
+	long applied_atten_lim_x100;
+	long applied_post_filter_beta_x1000;
 };
 
 static bool df_channel_init(struct df_channel *channel, const struct df_api *api, float atten_lim_db,
@@ -181,8 +181,8 @@ static void *deepfilter_create(obs_data_t *settings, obs_source_t *source)
 	(void)source;
 
 	ctx = bzalloc(sizeof(*ctx));
-	atomic_init(&ctx->atten_lim_x100, (int)(DF_DEFAULT_ATTEN_LIM_DB * 100.0f));
-	atomic_init(&ctx->post_filter_beta_x1000, 0);
+	os_atomic_store_long(&ctx->atten_lim_x100, (long)(DF_DEFAULT_ATTEN_LIM_DB * 100.0f));
+	os_atomic_store_long(&ctx->post_filter_beta_x1000, 0);
 	ctx->applied_atten_lim_x100 = -1;
 	ctx->applied_post_filter_beta_x1000 = -1;
 
@@ -201,8 +201,8 @@ static void *deepfilter_create(obs_data_t *settings, obs_source_t *source)
 	if (atten_lim_db > 100.0f)
 		atten_lim_db = 100.0f;
 
-	atomic_store(&ctx->atten_lim_x100, (int)(atten_lim_db * 100.0f));
-	atomic_store(&ctx->post_filter_beta_x1000, (int)(post_filter_beta * 1000.0f));
+	os_atomic_store_long(&ctx->atten_lim_x100, (long)(atten_lim_db * 100.0f));
+	os_atomic_store_long(&ctx->post_filter_beta_x1000, (long)(post_filter_beta * 1000.0f));
 
 	ctx->available = df_channel_init(&ctx->channels[0], &ctx->api, atten_lim_db, post_filter_beta);
 	if (!ctx->available) {
@@ -252,8 +252,8 @@ static void deepfilter_update(void *data, obs_data_t *settings)
 	if (atten_lim_db > 100.0f)
 		atten_lim_db = 100.0f;
 
-	atomic_store(&ctx->atten_lim_x100, (int)(atten_lim_db * 100.0f));
-	atomic_store(&ctx->post_filter_beta_x1000, (int)(post_filter_beta * 1000.0f));
+	os_atomic_store_long(&ctx->atten_lim_x100, (long)(atten_lim_db * 100.0f));
+	os_atomic_store_long(&ctx->post_filter_beta_x1000, (long)(post_filter_beta * 1000.0f));
 }
 
 static void deepfilter_activate(void *data)
@@ -299,8 +299,8 @@ static obs_properties_t *deepfilter_get_properties(void *data)
 static struct obs_audio_data *deepfilter_filter_audio(void *data, struct obs_audio_data *audio)
 {
 	struct deepfilter_ctx *ctx = data;
-	int atten_lim_x100;
-	int post_filter_beta_x1000;
+	long atten_lim_x100;
+	long post_filter_beta_x1000;
 	float *left;
 	uint32_t frames;
 
@@ -308,8 +308,8 @@ static struct obs_audio_data *deepfilter_filter_audio(void *data, struct obs_aud
 		return audio;
 
 	frames = audio->frames;
-	atten_lim_x100 = atomic_load(&ctx->atten_lim_x100);
-	post_filter_beta_x1000 = atomic_load(&ctx->post_filter_beta_x1000);
+	atten_lim_x100 = os_atomic_load_long(&ctx->atten_lim_x100);
+	post_filter_beta_x1000 = os_atomic_load_long(&ctx->post_filter_beta_x1000);
 
 	if (atten_lim_x100 != ctx->applied_atten_lim_x100) {
 		float atten_lim_db = (float)atten_lim_x100 / 100.0f;
