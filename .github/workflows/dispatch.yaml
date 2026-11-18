@@ -11,6 +11,9 @@ on:
           - build
 permissions:
   contents: write
+concurrency:
+  group: manual-build
+  cancel-in-progress: false
 jobs:
   check-and-build:
     if: inputs.job == 'build'

@@ -4,6 +4,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+concurrency:
+  group: manual-build
+  cancel-in-progress: false
 jobs:
   check-format:
     name: Check Formatting 🔍

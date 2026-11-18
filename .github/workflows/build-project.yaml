@@ -259,7 +259,8 @@ jobs:
   windows-build:
     name: Build for Windows 🪟
     runs-on: windows-2025-vs2026
-    needs: check-event
+    needs: [check-event, macos-build]
+    if: always() && needs.check-event.result == 'success'
     defaults:
       run:
         shell: pwsh
