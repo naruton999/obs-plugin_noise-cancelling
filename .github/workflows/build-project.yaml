@@ -140,6 +140,13 @@ jobs:
           codesign: ${{ fromJSON(needs.check-event.outputs.codesign) }}
           codesignIdent: ${{ steps.codesign.outputs.codesignIdent }}
 
+      - name: Smoke Test 🧪
+        shell: zsh --no-rcs --errexit --pipefail {0}
+        run: |
+          : Smoke Test 🧪
+          python3 tests/smoke_test.py \
+            "release/${{ needs.check-event.outputs.config }}/obs-deepfilter-noise.plugin/Contents/MacOS/libdf_ffi.dylib"
+
       - name: Package Plugin 📀
         uses: ./.github/actions/package-plugin
         with:
@@ -282,6 +289,13 @@ jobs:
         with:
           target: x64
           config: ${{ needs.check-event.outputs.config }}
+
+      - name: Smoke Test 🧪
+        shell: pwsh
+        run: |
+          # Smoke Test 🧪
+          python tests/smoke_test.py `
+            "release/${{ needs.check-event.outputs.config }}/plugins/obs-deepfilter-noise/df_ffi.dll"
 
       - name: Package Plugin 📀
         uses: ./.github/actions/package-plugin

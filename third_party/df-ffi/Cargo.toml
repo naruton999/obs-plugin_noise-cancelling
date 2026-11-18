@@ -1,0 +1,23 @@
+[package]
+name = "df-ffi"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-2.0-or-later"
+publish = false
+
+[lib]
+name = "df_ffi"
+crate-type = ["cdylib"]
+
+[dependencies]
+deep_filter = { path = "../DeepFilterNet/libDF", default-features = false, features = ["tract", "default-model", "logging"] }
+ndarray = "0.15"
+# Pin the tract crates to the versions used by DeepFilterNet's Cargo.lock.
+# Newer 0.21.x releases changed the Graph API and do not compile.
+tract-core = "=0.21.4"
+tract-hir = "=0.21.4"
+tract-onnx = "=0.21.4"
+tract-pulse = "=0.21.4"
+
+[profile.release]
+panic = "unwind"

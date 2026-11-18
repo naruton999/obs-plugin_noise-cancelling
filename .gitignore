@@ -8,10 +8,15 @@
 !/data
 !/docs
 !/src
+!/tests
+!/.gitmodules
+!/rust-toolchain.toml
+!/third_party
 
 # Exclude local-only files
 /AGENTS.md
 /docs/proposals/
+/third_party/df-ffi/target/
 !.clang-format
 !.gersemirc
 !.gitignore

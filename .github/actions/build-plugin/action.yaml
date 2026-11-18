@@ -27,6 +27,22 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Set up Rust (macOS) 🦀
+      if: runner.os == 'macOS'
+      uses: dtolnay/rust-toolchain@1.96.0
+      with:
+        targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+    - name: Set up Rust (Windows) 🦀
+      if: runner.os == 'Windows'
+      uses: dtolnay/rust-toolchain@1.96.0
+
+    - name: Cache Rust 🦀
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: third_party/df-ffi -> target
+        key: ${{ runner.os }}-${{ hashFiles('third_party/df-ffi/Cargo.lock') }}
+
     - name: Run macOS Build
       if: runner.os == 'macOS'
       shell: zsh --no-rcs --errexit --pipefail {0}

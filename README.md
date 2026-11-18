@@ -2,7 +2,7 @@
 
 OBS Studio 用の音声フィルタプラグイン。DeepFilterNet3 を CPU で推論し、マイクのノイズを抑制する。Windows と macOS の両方で動作する。
 
-> **ステータス:** 設計中。実装はこれから。
+> **ステータス:** 初期実装済み。OBS での動作確認中。
 
 ## 特徴
 
@@ -48,6 +48,15 @@ tar.xz を展開し、`obs-deepfilter-noise.plugin` を以下に置きます。
 ```text
 ~/Library/Application Support/obs-studio/plugins/obs-deepfilter-noise.plugin
 ```
+
+## 使い方
+
+1. OBS でマイクなどの音声ソースを選択
+2. 右下の **「フィルタ」** をクリック
+3. 左下の **「＋」** をクリック
+4. **「音声フィルタ」** から **DeepFilterNet Noise Cancelling** を選択
+
+フィルタは音声ソースごとに追加します。「ソースの追加」メニューや OBS の設定画面には表示されません。
 
 ## ドキュメント
 
