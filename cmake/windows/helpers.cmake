@@ -65,8 +65,7 @@ function(target_install_resources target)
     file(GLOB_RECURSE data_files "${CMAKE_CURRENT_SOURCE_DIR}/data/*")
     foreach(data_file IN LISTS data_files)
       cmake_path(
-        RELATIVE_PATH
-        data_file
+        RELATIVE_PATH data_file
         BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/data/"
         OUTPUT_VARIABLE relative_path
       )
@@ -101,8 +100,7 @@ function(target_add_resource target resource)
     POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/rundir/$<CONFIG>/plugins/${target}/data"
     COMMAND
-      "${CMAKE_COMMAND}" -E copy "${resource}"
-      "${CMAKE_CURRENT_BINARY_DIR}/rundir/$<CONFIG>/plugins/${target}/data"
+      "${CMAKE_COMMAND}" -E copy "${resource}" "${CMAKE_CURRENT_BINARY_DIR}/rundir/$<CONFIG>/plugins/${target}/data"
     COMMENT "Copy ${target} resource ${resource} to rundir"
     VERBATIM
   )
