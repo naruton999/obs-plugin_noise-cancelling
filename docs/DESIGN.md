@@ -361,7 +361,7 @@ obs-plugin_noise-cancelling/
 3. プラグインターゲットが Rust ライブラリに依存するよう `add_dependencies` を設定。
 4. ビルド後のコピー:
    - macOS: `libdf_ffi.dylib` を `.plugin/Contents/MacOS/` へ
-   - Windows: `df_ffi.dll` を `rundir/<Config>/` とインストール先の `bin/64bit/` へ
+   - Windows: `df_ffi.dll` を `rundir/<Config>/plugins/<plugin>/` とインストール先の `plugins/<plugin>/` へ
 5. モデルファイルの実行時コピーは不要（埋め込み）。
 
 **macOS Universal:**
@@ -409,17 +409,19 @@ cmake --build --preset windows-x64
 
 | ファイル | トリガー | 内容 |
 |---|---|---|
-| `push.yaml` | master / develop への push、タグ | ビルド → パッケージ → リリース |
-| `pr-pull.yaml` | Pull Request | ビルドとフォーマットチェック |
-| `dispatch.yaml` | 手動 | 任意ビルド |
+| `push.yaml`（Manual Build） | 手動 | フォーマット + ビルド |
+| `pr-pull.yaml`（Manual Format & Build） | 手動 | フォーマット + ビルド |
+| `dispatch.yaml` | 手動 | ビルド |
 | `build-project.yaml` | 上記から呼び出し | macOS / Windows の実ビルド |
-| `check-format.yaml` | PR | C / CMake / Rust のフォーマット |
+| `check-format.yaml` | 上記から呼び出し | C / CMake / Rust のフォーマット |
+
+push / Pull Request による自動実行は行わない。必要になった時点でトリガーを再有効化する。
 
 ### 8.2 ビルドジョブ
 
 | ジョブ | ランナー | ターゲット | 成果物 |
 |---|---|---|---|
-| macOS | `macos-26`（Xcode 26.5） | Universal（arm64 + x86_64） | `.pkg` / `.tar.xz` |
+| macOS | `macos-26`（Xcode 26.5） | Universal（arm64 + x86_64） | `.tar.xz` |
 | Windows | `windows-2025-vs2026` | x64 | `.zip` |
 | Ubuntu | （v0 では無効） | x64 | — |
 
@@ -443,19 +445,24 @@ Linux はビルド可能だが、v0 の公式サポート外として CI を止�
 
 ### 8.4 成果物
 
+インストーラは生成しない。
+
 - Windows: `obs-deepfilter-noise-<version>-windows-x64.zip`
-  - `obs-deepfilter-noise/bin/64bit/obs-deepfilter-noise.dll`
-  - `obs-deepfilter-noise/bin/64bit/df_ffi.dll`
-  - `obs-deepfilter-noise/data/locale/*.ini`
-- macOS: `obs-deepfilter-noise-<version>-macos-universal.pkg`（または `.tar.xz`）
+  - `plugins/obs-deepfilter-noise/obs-deepfilter-noise.dll`
+  - `plugins/obs-deepfilter-noise/df_ffi.dll`
+  - `plugins/obs-deepfilter-noise/data/locale/*.ini`
+  - 展開先: `C:\ProgramData\obs-studio\` またはポータブル OBS のルート
+- macOS: `obs-deepfilter-noise-<version>-macos-universal.tar.xz`
   - `obs-deepfilter-noise.plugin/Contents/MacOS/obs-deepfilter-noise`
   - `obs-deepfilter-noise.plugin/Contents/MacOS/libdf_ffi.dylib`
   - `obs-deepfilter-noise.plugin/Contents/Resources/...`
 
+Windows の zip は OBS 32.2.1 以降の新形式（`plugins/<plugin>/`）に従う。`bin/64bit` や `obs-plugins/64bit` は使用しない。
+
 ### 8.5 リリースと署名
 
-- セマンティックバージョンのタグ（例: `0.1.0`）で draft release を自動作成する（テンプレートの既存動作）。
-- macOS の署名・公証はシークレット（Developer ID）が設定されている場合のみ実行。
+- 自動リリースは行わない（手動実行のみ）。リリースはユーザーが手動作成する。
+- macOS は `.plugin` バンドルの署名のみ行う。`.pkg` を生成しないため公証は行わない。
 - Windows のコード署名は v0 では未対応。未署名のため SmartScreen の警告が出る可能性がある。将来 Azure Trusted Signing などを検討する。
 - 署名なしでも動作するが、macOS では Gatekeeper の警告が出るため、配布時は `xattr -dr com.apple.quarantine` などの案内を README に記載する。
 

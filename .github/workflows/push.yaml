@@ -1,20 +1,12 @@
-name: Push
-run-name: ${{ github.ref_name }} push run 🚀
+name: Manual Build
+run-name: ${{ github.ref_name }} manual build 🚀
 on:
-  push:
-    branches:
-      - master
-      - main
-      - develop
-      - 'release/**'
-    tags:
-      - '*'
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
   check-format:
     name: Check Formatting 🔍
-    if: github.ref_name == 'master' || github.ref_name == 'main' || github.ref_name == 'develop'
     uses: ./.github/workflows/check-format.yaml
     permissions:
       contents: read
@@ -28,7 +20,8 @@ jobs:
 
   create-release:
     name: Create Release 🛫
-    if: github.ref_type == 'tag'
+    # Automatic releases are disabled while the workflow is manual-only.
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     needs: build-project
     defaults:
@@ -73,9 +66,8 @@ jobs:
           commit_hash="${GITHUB_SHA:0:9}"
 
           variants=(
-            'windows-x64;zip|exe'
-            'macos-universal;tar.xz|pkg'
-            'ubuntu-24.04-x86_64;tar.xz|deb|ddeb'
+            'windows-x64;zip'
+            'macos-universal;tar.xz'
             'sources;tar.xz'
           )
 
@@ -97,7 +89,7 @@ jobs:
           shopt -s extglob
 
           echo "### Checksums" > ${{ github.workspace }}/CHECKSUMS.txt
-          for file in ${{ github.workspace }}/@(*.exe|*.deb|*.ddeb|*.pkg|*.tar.xz|*.zip); do
+          for file in ${{ github.workspace }}/@(*.tar.xz|*.zip); do
             echo "    ${file##*/}: $(sha256sum "${file}" | cut -d " " -f 1)" >> ${{ github.workspace }}/CHECKSUMS.txt
           done
 
@@ -112,9 +104,5 @@ jobs:
           name: ${{ needs.build-project.outputs.pluginName }} ${{ steps.check.outputs.version }}
           body_path: ${{ github.workspace }}/CHECKSUMS.txt
           files: |
-            ${{ github.workspace }}/*.exe
             ${{ github.workspace }}/*.zip
-            ${{ github.workspace }}/*.pkg
-            ${{ github.workspace }}/*.deb
-            ${{ github.workspace }}/*.ddeb
             ${{ github.workspace }}/*.tar.xz

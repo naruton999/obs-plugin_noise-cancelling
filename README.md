@@ -13,13 +13,49 @@ OBS Studio 用の音声フィルタプラグイン。DeepFilterNet3 を CPU で�
 - **クロスプラットフォーム** — Windows x64 / macOS Universal（arm64 + x86_64）
 - **対応バージョン** — OBS Studio 32.2.1 以降 / macOS 13 以降
 
+## インストール
+
+インストーラはありません。Windows は zip、macOS は tar.xz を手動で配置してください。
+
+### Windows（通常インストール）
+
+zip を `C:\ProgramData\obs-studio\` に展開します。以下のように配置されます。
+
+```text
+C:\ProgramData\obs-studio\plugins\obs-deepfilter-noise\
+├── obs-deepfilter-noise.dll
+├── df_ffi.dll
+└── data\locale\...
+```
+
+### Windows（ポータブル）
+
+zip をポータブル OBS のルートフォルダに展開します。以下のように配置されます。
+
+```text
+<portable>\plugins\obs-deepfilter-noise\
+├── obs-deepfilter-noise.dll
+├── df_ffi.dll
+└── data\locale\...
+```
+
+> `obs-plugins\64bit` や `bin\64bit` は Legacy 形式です。OBS 32.2.1 以降では使用しないでください。
+
+### macOS
+
+tar.xz を展開し、`obs-deepfilter-noise.plugin` を以下に置きます。
+
+```text
+~/Library/Application Support/obs-studio/plugins/obs-deepfilter-noise.plugin
+```
+
 ## ドキュメント
 
 - [設計書](docs/DESIGN.md)
 
 ## ビルド
 
-GitHub Actions で Windows / macOS のビルドとパッケージを行う。ローカルビルド手順は設計書の「9.4 開発者向けビルド手順」を参照。
+GitHub Actions の手動実行で Windows / macOS のビルドを行う。ローカルビルド手順は設計書の「7.4 開発者向けビルド手順」を参照。
 
 ## ライセンス
 
