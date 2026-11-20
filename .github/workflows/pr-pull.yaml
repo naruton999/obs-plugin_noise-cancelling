@@ -1,0 +1,22 @@
+name: Manual Format & Build
+run-name: ${{ github.ref_name }} manual run 🚀
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: manual-build
+  cancel-in-progress: false
+jobs:
+  check-format:
+    name: Check Formatting 🔍
+    uses: ./.github/workflows/check-format.yaml
+    permissions:
+      contents: read
+
+  build-project:
+    name: Build Project 🧱
+    uses: ./.github/workflows/build-project.yaml
+    secrets: inherit
+    permissions:
+      contents: read
