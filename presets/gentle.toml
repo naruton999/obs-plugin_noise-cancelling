@@ -1,0 +1,16 @@
+schema_version = 1
+name = "gentle"
+description = "控えめなノイズ抑制（環境音を残す）"
+created = "2026-11-21"
+
+[denoise]
+enabled = true
+attenuation_limit_db = 12.0
+post_filter_beta = 0.0
+mix = 1.0
+min_db_thresh = -10.0
+max_db_erb_thresh = 30.0
+max_db_df_thresh = 20.0
+
+[ui]
+bypass = false
