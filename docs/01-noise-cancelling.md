@@ -165,6 +165,8 @@ obs-plugin_noise-cancelling/
 | `max_db_erb_thresh` | -15〜35 | 30 | 上級者向け |
 | `max_db_df_thresh` | -15〜35 | 20 | 上級者向け |
 | `bypass` | on/off | off | 遅延維持バイパス |
+| `declick` | on/off | off | 試作。3 点メディアンで単発クリックを抑える |
+| `voice_protect` | 0〜0.5 | 0.0 | 試作。LSNR が高い時に乾音をブレンド |
 | `model` | `ll` / `standard` | `ll` | プルダウン |
 | `low_latency` | on/off | off | ON で 1 hop、OFF で 2 hop |
 
@@ -173,6 +175,8 @@ obs-plugin_noise-cancelling/
 - `mix` と `attenuation_limit_db` は 10〜20 ms でスムージングする。
 - `enabled=false` は FIFO を通さず即時乾音。再開時はリセット＋再プライム。
 - `bypass=true` は `mix=0` と同じだが、DFN は動かして状態を暖める。
+- `declick` は DFN の入力前段。3 点メディアンで単発クリックを抑える。長いクリック・構造音には限界がある。
+- `voice_protect` は `Backend::process_hop` が返す LSNR が 0 dB 超の時、指定割合だけ乾音を追加する。試作。
 
 ### 4.2 モデル
 
@@ -277,7 +281,9 @@ pub enum Engine {
 - `dry_fifo` は `L_dfn` 分遅らせ、DFN 出力と乾音を整列する。
 - `process(input, output)` は処理済みサンプルを `output` に追記する。出力長は入力長と異なってよい（hop の端数は次回に持ち越す）。OBS 側の出力リングが遅延と端数を吸収する。
 - `mix` / `attenuation_limit_db` は 10〜20 ms でスムージングする。同一パラメータの再設定は無視する。
-- `reset` は FIFO をクリアし、`dry_fifo` を `L_dfn` のゼロで再プライムし、`backend.reset()` を呼ぶ。
+- `declick=true` のとき、入力に 3 点メディアン（`Declicker`）を適用してから FIFO に入れる。遅延は 1 サンプル程度。
+- `voice_protect` は `process_hop` の LSNR が 0 dB 超のとき、`mix` の一部を乾音に置き換える。アタック約 5 ms、リリース約 50 ms。
+- `reset` は FIFO をクリアし、`dry_fifo` を `L_dfn` のゼロで再プライムし、`backend.reset()` を呼ぶ。`Declicker` もリセットする。
 - `enabled=false` は入力コピー。再有効化時は `reset`。
 - `bypass=true` は `mix=0` として遅延乾音を出す。DFN は動かす。
 
@@ -300,6 +306,7 @@ pub enum Engine {
 - `hop_size = df.hop_size`（通常 480）。
 - `latency_samples = (df.lookahead + 1) * hop`。
 - `process_hop` は `(1, hop)` の `Array2` を使い、hop ごとのアロケーションを避ける。
+- `process_hop` は `DfTract::process` の戻り値（LSNR）を返す。`Denoiser` の声保護に使う。
 - `set_params` は `set_atten_lim`、`set_pf_beta`、しきい値を反映する。
 - `reset` は `df.init()`。
 
@@ -321,6 +328,8 @@ mix = 1.0
 min_db_thresh = -10.0
 max_db_erb_thresh = 30.0
 max_db_df_thresh = 20.0
+declick = false
+voice_protect = 0.0
 
 [ui]
 bypass = false
@@ -332,6 +341,7 @@ bypass = false
 | `gentle.toml` | 12 dB | 0.0 | 100% | 控えめ |
 | `strong.toml` | 100 dB | 0.02 | 100% | 強め |
 | `speech.toml` | 24 dB | 0.01 | 100% | 音声向け |
+| `hybrid.toml` | 24 dB | 0.0 | 85% | **試作**。クリック除去＋声保護 |
 
 - プリセットは DSP パラメータのみ。モデル / 低遅延モードは変更しない。
 - 適用時は `enabled=true`、`bypass=false`。
@@ -494,6 +504,8 @@ struct AudioSide {
 | 有効 | チェック | ON | OFF は即時乾音 |
 | 低減量 | スライダー | 0〜100 dB / 100 | 0 dB = 低減なし |
 | ミックス | スライダー | 0〜100% / 100% | 0% = 遅延乾音 |
+| クリック音除去（試作） | チェック | OFF | 3 点メディアン |
+| 声の保護（試作） | スライダー | 0〜50% / 0% | LSNR が高い時に乾音を追加 |
 | ポストフィルタ | チェック | OFF | ON で β 有効 |
 | β | スライダー | 0〜0.05 / 0.0 | |
 | 上級者向けしきい値 | チェック | OFF | 3 スライダーの有効/無効を切替 |
@@ -642,6 +654,8 @@ anyhow = "1"
 | `nan_input_is_sanitized` | NaN/Inf で出力が有限 |
 | `reset_clears_state` | リセット後に前の音が残らない |
 | `enabled_is_immediate_passthrough` | `enabled=false` で遅延 0 |
+| `declick_removes_impulse` | 単発クリックが除去され、サインが保たれる |
+| `voice_protect_blends_dry` | 抑圧時に LSNR 連動で乾音がブレンドされる |
 | `resample_44k_roundtrip` | 44.1k → 48k → 44.1k でサンプル数・波形が破綻しない |
 | `model_kind_ids` | `ll` / `standard` の相互変換 |
 | `embedded_flags_follow_features` | `embed-*` フィーチャーと `model_embedded()` の一致 |
@@ -705,8 +719,9 @@ anyhow = "1"
 |---|---|---|---|---|
 | LL / 48 kHz / 2 hop / standard | 10.00 ms | 30.00 ms | 0.150076 | 0.054353 |
 | 標準 / 44.1 kHz / 2 hop / standard | 31.36 ms | 51.36 ms | 0.150087 | 0.041440 |
+| 標準 / 48 kHz / 2 hop / hybrid（試作） | 30.00 ms | 50.00 ms | 0.150076 | 0.139917 |
 
-OBS の音声ブロック（約 21 ms）は上記に含まない。いずれも出力が無音にならず、RMS が低下していることを確認した。
+OBS の音声ブロック（約 21 ms）は上記に含まない。いずれも出力が無音にならず、RMS が低下していることを確認した。hybrid は声の保護と mix 85% のため、standard より低減量が小さい。
 
 ---
 
@@ -758,6 +773,7 @@ OBS の音声ブロック（約 21 ms）は上記に含まない。いずれも�
 | P2 | `obs-filter`（FFI、worker、UI、models、presets） | 完了。Linux `check-only` で型チェック・clippy 済み |
 | P3 | パッケージ、CI、README、実機/オフライン確認 | 一部完了。ユーザー環境の OBS でノイズ抑制動作を確認済み。macOS 実機、ユーザー提供 WAV は未 |
 | P4 | 設定復元（`create` で保存設定を読む）とモデル埋め込み（`df-models` + `embed-*`） | 実装・ビルド・テスト完了。OBS 再起動での設定復元確認は未 |
+| P5 | ハイブリッド試作（3 点メディアン de-clicker + LSNR 連動 voice protect + `hybrid` プリセット） | 実装・テスト完了。OBS 実機での効果確認は未 |
 
 - ブランチは `feature/ai-0001-noise-cancelling`。完了までこのブランチで作業する。
 - コミットは `AI <ai@example.com>` 名義。
