@@ -91,7 +91,7 @@ obs-plugin_noise-cancelling/
 │  │  │  ├─ lib.rs          # DenoiseParams, Engine, Denoiser, tests
 │  │  │  ├─ backend.rs      # Backend trait
 │  │  │  ├─ dfn.rs          # DeepFilterNet backend（外部モデル）
-│  │  │  ├─ declick.rs      # 3 点メディアン de-clicker（試作）
+│  │  │  ├─ declick.rs      # 条件付き 7 点メディアン de-clicker（試作）
 │  │  │  ├─ resample.rs     # 44.1k <-> 48k（rubato）
 │  │  │  ├─ preset.rs       # TOML プリセット
 │  │  │  └─ stereo.rs       # Mid/Side ヘルパー
@@ -162,7 +162,7 @@ obs-plugin_noise-cancelling/
 | `max_db_erb_thresh` | -15〜35 | 30 | 上級者向け |
 | `max_db_df_thresh` | -15〜35 | 20 | 上級者向け |
 | `bypass` | on/off | off | 遅延維持バイパス |
-| `declick` | on/off | off | 試作。3 点メディアンで単発クリックを抑える |
+| `declick` | on/off | off | 試作。条件付き 7 点メディアンで数サンプルのクリックを抑える |
 | `voice_protect` | 0〜0.5 | 0.0 | 試作。LSNR が高い時に乾音をブレンド |
 | `model` | `ll` / `standard` | `ll` | プルダウン |
 | `low_latency` | on/off | off | ON で 1 hop、OFF で 2 hop |
@@ -172,7 +172,7 @@ obs-plugin_noise-cancelling/
 - `mix` と `attenuation_limit_db` は 10〜20 ms でスムージングする。
 - `enabled=false` は FIFO を通さず即時乾音。再開時はリセット＋再プライム。
 - `bypass=true` は `mix=0` と同じだが、DFN は動かして状態を暖める。
-- `declick` は DFN の入力前段。3 点メディアンで単発クリックを抑える。長いクリック・構造音には限界がある。
+- `declick` は DFN の入力前段。条件付き 7 点メディアンで数サンプルのクリックを抑える。長いクリック・構造音には限界がある。
 - `voice_protect` は `Backend::process_hop` が返す LSNR が 0 dB 超の時、指定割合だけ乾音を追加する。試作。
 
 ### 4.2 モデル
@@ -274,7 +274,7 @@ pub enum Engine {
 - `dry_fifo` は `L_dfn` 分遅らせ、DFN 出力と乾音を整列する。
 - `process(input, output)` は処理済みサンプルを `output` に追記する。出力長は入力長と異なってよい（hop の端数は次回に持ち越す）。OBS 側の出力リングが遅延と端数を吸収する。
 - `mix` / `attenuation_limit_db` は 10〜20 ms でスムージングする。同一パラメータの再設定は無視する。
-- `declick=true` のとき、入力に 3 点メディアン（`Declicker`）を適用してから FIFO に入れる。遅延は 1 サンプル程度。
+- `declick=true` のとき、入力に条件付き 7 点メディアン（`Declicker`）を適用してから FIFO に入れる。遅延は 3 サンプル程度。
 - `voice_protect` は `process_hop` の LSNR が 0 dB 超のとき、`mix` の一部を乾音に置き換える。アタック約 5 ms、リリース約 50 ms。
 - `reset` は FIFO をクリアし、`dry_fifo` を `L_dfn` のゼロで再プライムし、`backend.reset()` を呼ぶ。`Declicker` もリセットする。
 - `enabled=false` は入力コピー。再有効化時は `reset`。
@@ -495,7 +495,7 @@ struct AudioSide {
 | 有効 | チェック | ON | OFF は即時乾音 |
 | 低減量 | スライダー | 0〜100 dB / 100 | 0 dB = 低減なし |
 | ミックス | スライダー | 0〜100% / 100% | 0% = 遅延乾音 |
-| クリック音除去（試作） | チェック | OFF | 3 点メディアン |
+| クリック音除去（試作） | チェック | OFF | 条件付き 7 点メディアン |
 | 声の保護（試作） | スライダー | 0〜50% / 0% | LSNR が高い時に乾音を追加 |
 | ポストフィルタ | チェック | OFF | ON で β 有効 |
 | β | スライダー | 0〜0.05 / 0.0 | |
@@ -636,6 +636,9 @@ anyhow = "1"
 | `reset_clears_state` | リセット後に前の音が残らない |
 | `enabled_is_immediate_passthrough` | `enabled=false` で遅延 0 |
 | `declick_removes_impulse` | 単発クリックが除去され、サインが保たれる |
+| `declick_removes_three_sample_click` | 3 サンプル連続クリックが除去される |
+| `declick_removes_one_millisecond_burst` | 1 ms のクリックバーストが低減される |
+| `declick_preserves_high_frequency_sine` | 8 kHz のサインを大きく損なわない |
 | `voice_protect_blends_dry` | 抑圧時に LSNR 連動で乾音がブレンドされる |
 | `resample_44k_roundtrip` | 44.1k → 48k → 44.1k でサンプル数・波形が破綻しない |
 | `model_kind_ids` | `ll` / `standard` の相互変換 |
@@ -753,7 +756,7 @@ OBS の音声ブロック（約 21 ms）は上記に含まない。いずれも�
 | P2 | `obs-filter`（FFI、worker、UI、models、presets） | 完了。Linux `check-only` で型チェック・clippy 済み |
 | P3 | パッケージ、CI、README、実機/オフライン確認 | 一部完了。ユーザー環境の OBS でノイズ抑制動作を確認済み。macOS 実機、ユーザー提供 WAV は未 |
 | P4 | 設定復元（`create` で保存設定を読む） | 実装・テスト完了。OBS 再起動での設定復元確認は未 |
-| P5 | ハイブリッド試作（3 点メディアン de-clicker + LSNR 連動 voice protect + `hybrid` プリセット） | 実装・テスト完了。OBS 実機での効果確認は未 |
+| P5 | ハイブリッド試作（条件付き 7 点メディアン de-clicker + LSNR 連動 voice protect + `hybrid` プリセット） | 実装・テスト完了。OBS 実機での効果確認は未 |
 | P6 | ビルド整理（埋め込み廃止、Windows CI を DLL のみ・フルパッケージ・チェックの 3 ワークフローに分割） | 完了 |
 
 - 現在の作業ブランチは `feature/ai-0003-hybrid-prototype`（`feature/ai-0001-noise-cancelling` から派生）。
