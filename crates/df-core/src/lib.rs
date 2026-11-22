@@ -208,7 +208,7 @@ impl Denoiser {
         let cap = max_block.max(1) + 4 * hop + latency + 8;
 
         let mut dry_fifo = VecDeque::with_capacity(cap);
-        dry_fifo.extend(std::iter::repeat(0.0).take(latency));
+        dry_fifo.extend(std::iter::repeat_n(0.0, latency));
 
         let params = DenoiseParams::default();
         let mut backend = backend;
@@ -245,6 +245,9 @@ impl Denoiser {
 
     pub fn set_params(&mut self, params: DenoiseParams) {
         let params = params.sanitized();
+        if params == self.params {
+            return;
+        }
         let mix_target = if params.bypass { 0.0 } else { params.mix };
         self.mix.set_target(mix_target, self.hop * 2);
         self.atten
@@ -341,8 +344,7 @@ impl Denoiser {
     fn clear_fifos(&mut self) {
         self.in_fifo.clear();
         self.dry_fifo.clear();
-        self.dry_fifo
-            .extend(std::iter::repeat(0.0).take(self.latency));
+        self.dry_fifo.extend(std::iter::repeat_n(0.0, self.latency));
     }
 
     fn reset_internal(&mut self) {
@@ -357,19 +359,19 @@ impl Denoiser {
 /// Native-rate engine that selects the 48 kHz path or the 44.1 kHz resampling
 /// path.
 pub enum Engine {
-    Native(Denoiser),
-    Resampled(ResamplingDenoiser),
+    Native(Box<Denoiser>),
+    Resampled(Box<ResamplingDenoiser>),
 }
 
 impl Engine {
     pub fn new(backend: Box<dyn Backend>, sample_rate: u32, max_block: usize) -> Result<Self> {
         match sample_rate {
-            DFN_SAMPLE_RATE => Ok(Self::Native(Denoiser::new(backend, max_block)?)),
-            44_100 => Ok(Self::Resampled(ResamplingDenoiser::new(
+            DFN_SAMPLE_RATE => Ok(Self::Native(Box::new(Denoiser::new(backend, max_block)?))),
+            44_100 => Ok(Self::Resampled(Box::new(ResamplingDenoiser::new(
                 backend,
                 sample_rate,
                 max_block,
-            )?)),
+            )?))),
             other => anyhow::bail!("unsupported sample rate: {other}"),
         }
     }
@@ -485,6 +487,15 @@ mod tests {
         let mut output = Vec::with_capacity(input.len() + 64);
         denoiser.process(input, &mut output);
         output
+    }
+
+    #[test]
+    fn model_kind_ids() {
+        assert_eq!(ModelKind::from_id("ll"), Some(ModelKind::LowLatency));
+        assert_eq!(ModelKind::from_id("standard"), Some(ModelKind::Standard));
+        assert_eq!(ModelKind::LowLatency.id(), "ll");
+        assert_eq!(ModelKind::Standard.id(), "standard");
+        assert_eq!(ModelKind::from_id("unknown"), None);
     }
 
     #[test]

@@ -68,11 +68,8 @@ pub fn parse_preset(text: &str) -> Result<Preset, String> {
                 "max_db_df_thresh" => preset.params.max_db_df_thresh = parse_f32(value)?,
                 _ => {}
             },
-            "ui" => {
-                if key == "bypass" {
-                    preset.bypass = parse_bool(value);
-                }
-            }
+            "ui" if key == "bypass" => preset.bypass = parse_bool(value),
+            "ui" => {}
             _ => {}
         }
     }

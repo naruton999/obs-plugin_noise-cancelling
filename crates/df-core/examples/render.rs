@@ -112,11 +112,21 @@ fn main() -> Result<()> {
     println!("sample rate: {} Hz", spec.sample_rate);
     println!("channels: {}", spec.channels);
     println!(
+        "input RMS / peak: {:.6} / {:.6}",
+        rms(&channels),
+        peak(&channels)
+    );
+    println!(
+        "output RMS / peak: {:.6} / {:.6}",
+        rms(&processed),
+        peak(&processed)
+    );
+    println!(
         "DSP latency: {:.2} ms",
         dsp_latency as f64 / spec.sample_rate as f64 * 1000.0
     );
     println!(
-        "plugin latency estimate: {:.2} ms (including {} worker hop(s) + OBS block)",
+        "plugin internal latency estimate: {:.2} ms (DSP + {} worker hop(s); OBS block adds about 21 ms)",
         (dsp_latency + worker_hops * hop_native) as f64 / spec.sample_rate as f64 * 1000.0,
         worker_hops
     );
@@ -129,6 +139,30 @@ fn repo_root() -> Result<PathBuf> {
         .join("../..")
         .canonicalize()
         .context("resolve repository root")
+}
+
+fn rms(channels: &[Vec<f32>]) -> f32 {
+    let mut sum = 0.0f64;
+    let mut count = 0usize;
+    for channel in channels {
+        for &sample in channel {
+            sum += (sample as f64) * (sample as f64);
+        }
+        count += channel.len();
+    }
+    if count == 0 {
+        0.0
+    } else {
+        (sum / count as f64).sqrt() as f32
+    }
+}
+
+fn peak(channels: &[Vec<f32>]) -> f32 {
+    channels
+        .iter()
+        .flat_map(|channel| channel.iter())
+        .map(|sample| sample.abs())
+        .fold(0.0f32, f32::max)
 }
 
 fn process_mono(engine: &mut Engine, input: &[f32]) -> Vec<f32> {

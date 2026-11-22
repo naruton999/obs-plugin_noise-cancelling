@@ -9,6 +9,12 @@ description = "OBS audio filter binding for obs-plugin_noise-cancelling"
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+# Local type-checking on unsupported hosts (for example Linux CI). Do not
+# enable this for release builds; the real plugin only supports macOS/Windows.
+check-only = []
+
 [dependencies]
 df-core = { path = "../df-core" }
 rtrb = "0.3"
+anyhow = "1"

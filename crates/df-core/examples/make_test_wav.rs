@@ -4,7 +4,10 @@ use anyhow::{Context, Result};
 
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
-    let output = PathBuf::from(args.next().unwrap_or_else(|| "target/test_noisy.wav".into()));
+    let output = PathBuf::from(
+        args.next()
+            .unwrap_or_else(|| "target/test_noisy.wav".into()),
+    );
     let seconds: f32 = args
         .next()
         .unwrap_or_else(|| "3.0".to_string())
@@ -35,12 +38,19 @@ fn main() -> Result<()> {
         let voice = (t * 220.0 * std::f32::consts::TAU).sin() * 0.18
             + (t * 440.0 * std::f32::consts::TAU).sin() * 0.10
             + (t * 1_300.0 * std::f32::consts::TAU).sin() * 0.04;
-        noise_state = noise_state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        noise_state = noise_state
+            .wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223);
         let noise = ((noise_state >> 8) as f32 / 16_777_215.0 - 0.5) * 0.08;
         let sample = (voice + noise).clamp(-1.0, 1.0);
         writer.write_sample::<i16>((sample * 32_767.0).round() as i16)?;
     }
     writer.finalize()?;
-    println!("created {} ({:.1}s, {} Hz)", output.display(), seconds, sample_rate);
+    println!(
+        "created {} ({:.1}s, {} Hz)",
+        output.display(),
+        seconds,
+        sample_rate
+    );
     Ok(())
 }
