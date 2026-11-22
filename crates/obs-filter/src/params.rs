@@ -42,6 +42,8 @@ pub(crate) struct AtomicParams {
     min_db_thresh: AtomicU32,
     max_db_erb_thresh: AtomicU32,
     max_db_df_thresh: AtomicU32,
+    declick: AtomicBool,
+    voice_protect: AtomicU32,
     model: AtomicU8,
     low_latency: AtomicBool,
     advanced: AtomicBool,
@@ -60,6 +62,8 @@ impl AtomicParams {
             min_db_thresh: AtomicU32::new((-10.0f32).to_bits()),
             max_db_erb_thresh: AtomicU32::new(30.0f32.to_bits()),
             max_db_df_thresh: AtomicU32::new(20.0f32.to_bits()),
+            declick: AtomicBool::new(false),
+            voice_protect: AtomicU32::new(0.0f32.to_bits()),
             model: AtomicU8::new(model_to_u8(settings.model)),
             low_latency: AtomicBool::new(false),
             advanced: AtomicBool::new(false),
@@ -97,6 +101,10 @@ impl AtomicParams {
             settings.denoise.max_db_df_thresh.to_bits(),
             Ordering::Relaxed,
         );
+        self.declick
+            .store(settings.denoise.declick, Ordering::Relaxed);
+        self.voice_protect
+            .store(settings.denoise.voice_protect.to_bits(), Ordering::Relaxed);
         self.model
             .store(model_to_u8(settings.model), Ordering::Relaxed);
         self.low_latency
@@ -120,6 +128,8 @@ impl AtomicParams {
                 max_db_erb_thresh: f32::from_bits(self.max_db_erb_thresh.load(Ordering::Relaxed)),
                 max_db_df_thresh: f32::from_bits(self.max_db_df_thresh.load(Ordering::Relaxed)),
                 bypass: self.bypass.load(Ordering::Relaxed),
+                declick: self.declick.load(Ordering::Relaxed),
+                voice_protect: f32::from_bits(self.voice_protect.load(Ordering::Relaxed)),
             },
             model: model_from_u8(self.model.load(Ordering::Relaxed)),
             low_latency: self.low_latency.load(Ordering::Relaxed),
@@ -164,6 +174,8 @@ mod tests {
                 max_db_erb_thresh: 28.0,
                 max_db_df_thresh: 18.0,
                 bypass: true,
+                declick: true,
+                voice_protect: 0.3,
             },
             model: ModelKind::Standard,
             low_latency: true,

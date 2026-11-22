@@ -47,6 +47,8 @@ pub(crate) unsafe extern "C" fn get_defaults(settings: *mut ObsData) {
                 c"mix".as_ptr(),
                 defaults.mix as f64 * 100.0,
             );
+            ffi::obs_data_set_default_bool(settings, c"declick".as_ptr(), false);
+            ffi::obs_data_set_default_double(settings, c"voice_protect".as_ptr(), 0.0);
             ffi::obs_data_set_default_double(
                 settings,
                 c"min_db_thresh".as_ptr(),
@@ -222,6 +224,23 @@ unsafe fn build_properties(
         );
         if !mix.is_null() {
             ffi::obs_property_float_set_suffix(mix, c" %".as_ptr());
+        }
+
+        ffi::obs_properties_add_bool(
+            props,
+            c"declick".as_ptr(),
+            c"クリック音除去（試作）".as_ptr(),
+        );
+        let voice_protect = ffi::obs_properties_add_float_slider(
+            props,
+            c"voice_protect".as_ptr(),
+            c"声の保護（試作）".as_ptr(),
+            0.0,
+            50.0,
+            1.0,
+        );
+        if !voice_protect.is_null() {
+            ffi::obs_property_float_set_suffix(voice_protect, c" %".as_ptr());
         }
 
         let post_filter = ffi::obs_properties_add_bool(
@@ -430,6 +449,12 @@ unsafe extern "C" fn apply_preset(
                 c"max_db_df_thresh".as_ptr(),
                 params.max_db_df_thresh as f64,
             );
+            ffi::obs_data_set_bool(settings, c"declick".as_ptr(), params.declick);
+            ffi::obs_data_set_double(
+                settings,
+                c"voice_protect".as_ptr(),
+                params.voice_protect as f64 * 100.0,
+            );
 
             if let Ok(file) = CString::new(chosen.file.as_str()) {
                 ffi::obs_data_set_string(settings, c"preset".as_ptr(), file.as_ptr());
@@ -462,6 +487,9 @@ pub(crate) unsafe fn read_settings(data: *mut ObsData, sample_rate: u32) -> Sett
         max_db_df_thresh: unsafe { ffi::obs_data_get_double(data, c"max_db_df_thresh".as_ptr()) }
             as f32,
         bypass: unsafe { ffi::obs_data_get_bool(data, c"bypass".as_ptr()) },
+        declick: unsafe { ffi::obs_data_get_bool(data, c"declick".as_ptr()) },
+        voice_protect: unsafe { ffi::obs_data_get_double(data, c"voice_protect".as_ptr()) } as f32
+            / 100.0,
     };
 
     let model = ModelKind::from_id(&unsafe { get_string(data, c"model") }).unwrap_or_default();

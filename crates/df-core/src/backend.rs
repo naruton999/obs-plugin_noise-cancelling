@@ -10,6 +10,8 @@ pub trait Backend {
     fn hop_size(&self) -> usize;
     fn latency_samples(&self) -> usize;
     fn set_params(&mut self, params: &DenoiseParams);
-    fn process_hop(&mut self, input: &[f32], output: &mut [f32]) -> anyhow::Result<()>;
+    /// Process one hop. The returned value is the local SNR estimate from the
+    /// backend (DeepFilterNet's `lsnr`), used by the voice-protect stage.
+    fn process_hop(&mut self, input: &[f32], output: &mut [f32]) -> anyhow::Result<f32>;
     fn reset(&mut self) -> anyhow::Result<()>;
 }

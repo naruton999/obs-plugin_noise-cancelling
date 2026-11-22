@@ -13,8 +13,9 @@ pub(crate) struct PresetEntry {
     pub preset: Preset,
 }
 
-const BUILTIN_PRESETS: [(&str, &str); 4] = [
+const BUILTIN_PRESETS: [(&str, &str); 5] = [
     ("gentle", include_str!("../../../presets/gentle.toml")),
+    ("hybrid", include_str!("../../../presets/hybrid.toml")),
     ("speech", include_str!("../../../presets/speech.toml")),
     ("standard", include_str!("../../../presets/standard.toml")),
     ("strong", include_str!("../../../presets/strong.toml")),

@@ -66,6 +66,8 @@ pub fn parse_preset(text: &str) -> Result<Preset, String> {
                 "min_db_thresh" => preset.params.min_db_thresh = parse_f32(value)?,
                 "max_db_erb_thresh" => preset.params.max_db_erb_thresh = parse_f32(value)?,
                 "max_db_df_thresh" => preset.params.max_db_df_thresh = parse_f32(value)?,
+                "declick" => preset.params.declick = parse_bool(value),
+                "voice_protect" => preset.params.voice_protect = parse_f32(value)?,
                 _ => {}
             },
             "ui" if key == "bypass" => preset.bypass = parse_bool(value),
@@ -125,9 +127,18 @@ mod tests {
             include_str!("../../../presets/gentle.toml"),
             include_str!("../../../presets/strong.toml"),
             include_str!("../../../presets/speech.toml"),
+            include_str!("../../../presets/hybrid.toml"),
         ] {
             parse_preset(text).unwrap();
         }
+    }
+
+    #[test]
+    fn parses_hybrid_preset() {
+        let preset = parse_preset(include_str!("../../../presets/hybrid.toml")).unwrap();
+        assert!(preset.params.declick);
+        assert!((preset.params.voice_protect - 0.3).abs() < 1e-6);
+        assert!((preset.params.attenuation_limit_db - 24.0).abs() < 1e-6);
     }
 
     #[test]

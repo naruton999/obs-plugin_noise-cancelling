@@ -100,7 +100,7 @@ impl Backend for DfnBackend {
         self.df.max_db_df_thresh = params.max_db_df_thresh;
     }
 
-    fn process_hop(&mut self, input: &[f32], output: &mut [f32]) -> Result<()> {
+    fn process_hop(&mut self, input: &[f32], output: &mut [f32]) -> Result<f32> {
         anyhow::ensure!(input.len() == self.df.hop_size, "invalid input hop size");
         anyhow::ensure!(output.len() == self.df.hop_size, "invalid output hop size");
 
@@ -108,7 +108,8 @@ impl Backend for DfnBackend {
             *dst = src;
         }
 
-        self.df
+        let lsnr = self
+            .df
             .process(self.noisy.view(), self.enhanced.view_mut())
             .context("DeepFilterNet process failed")?;
 
@@ -116,7 +117,7 @@ impl Backend for DfnBackend {
             *dst = src;
         }
 
-        Ok(())
+        Ok(lsnr)
     }
 
     fn reset(&mut self) -> Result<()> {
