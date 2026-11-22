@@ -135,6 +135,30 @@ Windows:
 
 `models/` に 2 つの tar.gz をダウンロードし、SHA256 を検証します。`models/` は git 管理外です。
 
+### DLL のみビルド（tar.gz を作らない）
+
+モデルを同梱せず、DLL だけを最短で作りたい場合:
+
+```powershell
+# 既定の外部モデル。モデルはコンパイルされません
+cargo build -p obs-filter --release --target x86_64-pc-windows-msvc
+# 生成物: target/x86_64-pc-windows-msvc/release/obs_filter.dll
+```
+
+パッケージ script から DLL だけを出す場合:
+
+```powershell
+# 外部モデル用 DLL のみ（presets/models/zip なし）
+./build-aux/package-windows.ps1 -Configuration Release -DllOnly
+
+# モデル埋め込みの単一 DLL（tar.gz なし）
+./build-aux/package-windows.ps1 -Configuration Release -DllOnly -EmbedModels
+```
+
+`-DllOnly` の出力は `dist/windows/obs-plugin_noise-cancelling.dll` だけです。zip、`data/presets`、`data/models` は作りません。プリセットは DLL 内蔵のものを使います。外部モデル版は、実行時に OBS のデータフォルダへ `models/*.tar.gz` を置いてください。
+
+GitHub Actions の Windows Build には `dll_only` 入力があります。`embed_models` と組み合わせられます。
+
 ### モデルの埋め込み
 
 既定は外部モデルです。モデルを DLL / `.plugin` に埋め込む場合は、以下のフィーチャーを使います。
@@ -146,13 +170,14 @@ Windows:
 | 標準のみ埋め込み | `--features embed-standard` | 約 8 MB | 標準は不要 |
 | 両方埋め込み | `--features embed-models` | 約 44 MB | 不要 |
 
-- 埋め込みビルドでも、**コンパイル時**に `models/` の tar.gz が必要です（`include_bytes!` のため）。先に `scripts/fetch-models.*` を実行してください。
+- 埋め込みビルドでも、**コンパイル時**に `models/` の tar.gz が必要です（`include_bytes!` のため）。先に `scripts/fetch-models.*` を実行してください。`-DllOnly` はモデルを自動取得しません。
 - モデルは `crates/df-models` に分離されています。モデルが変わらなければ、`df-core` / `obs-filter` のコード変更時にモデルを再コンパイルせず、コンパイル済みの `df-models` を再利用します。
 - 埋め込み時はパッケージに `data/models` / `Contents/Resources/models` を含めません。
+- 既定の外部モデルビルドは `df-models` をビルドしないため、`cargo build -p obs-filter` は DLL だけをコンパイルします。tar.gz が作られるのは、パッケージ script がモデルを取得・同梱するときだけです。
 - パッケージ scripts:
   - Windows: `./build-aux/package-windows.ps1 -Configuration Release -EmbedModels`
   - macOS: `./build-aux/package-macos.sh --embed-models`
-- GitHub Actions の手動実行には `embed_models` 入力があります。
+- GitHub Actions の手動実行には `embed_models` と `dll_only` 入力があります。
 
 ### Windows
 

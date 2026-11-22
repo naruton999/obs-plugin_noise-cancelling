@@ -602,6 +602,8 @@ anyhow = "1"
 - 外部モデル（既定）: `package-windows.ps1` / `package-macos.sh`。
 - 両方埋め込み: Windows `-EmbedModels`、macOS `--embed-models`（または `EMBED_MODELS=1`）。`data/models` / `Contents/Resources/models` は同梱しない。
 - 埋め込みビルドでもコンパイル時に `models/` が必要。パッケージ scripts は先に `fetch-models` を実行する。
+- **DLL のみ（Windows）**: `package-windows.ps1 -DllOnly`。`dist/windows/obs-plugin_noise-cancelling.dll` だけを出力し、zip・presets・models を作らない。`-DllOnly -EmbedModels` で単一 DLL にモデルを埋め込める。
+- `-DllOnly` はモデルを自動取得しない。外部モデル版は実行時に OBS のデータフォルダへ配置する。埋め込み版はコンパイル時に `models/` が必要。
 - Windows OBS 33 以降: `C:\ProgramData\obs-studio\plugins\obs-plugin_noise-cancelling\`。
 - Windows OBS 32.x / 旧配置: DLL を `obs-plugins\64bit\`、data を `data\obs-plugins\obs-plugin_noise-cancelling\`。
 - macOS: `~/Library/Application Support/obs-studio/plugins/` または `OBS.app/Contents/PlugIns/`。
@@ -615,9 +617,10 @@ anyhow = "1"
 | `windows.yml` | `windows-2022` | 必須 |
 | `macos.yml` | `macos-15`（arm64） | ベストエフォート |
 
-- トリガーは `workflow_dispatch`。入力 `embed_models`（boolean、既定 false）で両方埋め込みを選択。
+- トリガーは `workflow_dispatch`。入力 `embed_models`（boolean、既定 false）で両方埋め込み、`dll_only`（boolean、既定 false）で DLL のみ出力を選択。
 - fmt / `cargo test -p df-core` / `cargo test -p obs-filter` / clippy / fetch models / release build / package / upload。
 - `embed_models=true` のときは `--features embed-models` でビルドし、パッケージにモデルを同梱しない。
+- `dll_only=true` かつ `embed_models=false` のときはモデル取得をスキップし、DLL だけを出力する。
 - `Swatinem/rust-cache@v2`。
 - CI のテストは MockBackend 中心。実モデルはオフラインレンダラで確認する。
 - Windows を優先し、macOS の失敗は v0.1.0 のリリースをブロックしない（README に明記）。
