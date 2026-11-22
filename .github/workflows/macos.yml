@@ -40,15 +40,32 @@ jobs:
       - name: Run clippy
         run: cargo clippy -p obs-filter --all-targets --target aarch64-apple-darwin -- -D warnings
 
-      - name: Package
+      - name: Package .plugin
         run: ./build-aux/package-macos.sh
+
+      - name: Verify .plugin bundle
+        run: |
+          PLUGIN=dist/obs-plugin_noise-cancelling.plugin
+          test -d "$PLUGIN"
+          test -f "$PLUGIN/Contents/Info.plist"
+          test -f "$PLUGIN/Contents/MacOS/obs-plugin_noise-cancelling"
+          test -f "$PLUGIN/Contents/Resources/models/DeepFilterNet3_ll_onnx.tar.gz"
+          test -f "$PLUGIN/Contents/Resources/models/DeepFilterNet3_onnx.tar.gz"
+          test -f "$PLUGIN/Contents/Resources/presets/hybrid.toml"
+          plutil -lint "$PLUGIN/Contents/Info.plist"
 
       - name: Check architecture
         run: file dist/obs-plugin_noise-cancelling.plugin/Contents/MacOS/obs-plugin_noise-cancelling | grep arm64
 
-      - name: Upload artifact
+      - name: Prepare artifact
+        run: |
+          rm -rf dist/artifact
+          mkdir -p dist/artifact
+          ditto dist/obs-plugin_noise-cancelling.plugin dist/artifact/obs-plugin_noise-cancelling.plugin
+
+      - name: Upload .plugin artifact
         uses: actions/upload-artifact@v4
         with:
           name: obs-plugin_noise-cancelling-macos-arm64
-          path: dist/obs-plugin_noise-cancelling.plugin
+          path: dist/artifact/
           if-no-files-found: error

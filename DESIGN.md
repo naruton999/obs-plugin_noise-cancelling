@@ -68,7 +68,7 @@ OBS Studio の音声フィルタとして、マイクに入る定常ノイズ（
 | Cargo パッケージ | `df-core` / `obs-filter` |
 | cdylib 出力 | `obs_filter.dll` / `libobs_filter.dylib`（パッケージ時にリネーム） |
 | CI artifact（Win） | `obs-plugin_noise-cancelling-windows-x64-dll`（Windows Build (DLL only)） / `obs-plugin_noise-cancelling-windows-x64-full`（Windows Build (Full package)） |
-| CI artifact（mac） | `obs-plugin_noise-cancelling-macos-arm64` |
+| CI artifact（mac） | `obs-plugin_noise-cancelling-macos-arm64`（`.plugin` バンドル 1 つ） |
 | macOS Bundle ID | `com.naruton999.obs-plugin-noise-cancelling` |
 
 ---
@@ -596,7 +596,8 @@ anyhow = "1"
 - ビルドオプション（`-DllOnly` / `-EmbedModels` / `--embed-models`）は廃止した。
 - Windows OBS 33 以降: `C:\ProgramData\obs-studio\plugins\obs-plugin_noise-cancelling\`。
 - Windows OBS 32.x / 旧配置: DLL を `obs-plugins\64bit\`、data を `data\obs-plugins\obs-plugin_noise-cancelling\`。
-- macOS: `~/Library/Application Support/obs-studio/plugins/` または `OBS.app/Contents/PlugIns/`。
+- macOS: `~/Library/Application Support/obs-studio/plugins/`（推奨）または `/Library/Application Support/obs-studio/plugins/`（全ユーザー）。`OBS.app/Contents/PlugIns/` は更新で消えるため非推奨。
+- **macOS は `.plugin` バンドル 1 つのみ**。Windows のような DLL 単体／フルパッケージの分割はしない。
 - macOS は ad-hoc 署名。`CODESIGN_IDENTITY` で上書き可能。
 - `Info.plist` の Bundle ID は `com.naruton999.obs-plugin-noise-cancelling`。
 
@@ -607,7 +608,7 @@ anyhow = "1"
 | `windows.yml`（`Windows Build (DLL only)`） | `windows-2022` | DLL のみビルドして artifact 化 | 必須 |
 | `windows-full.yml`（`Windows Build (Full package)`） | `windows-2022` | DLL + presets + models のフルパッケージを artifact 化 | 必須 |
 | `windows-checks.yml` | `windows-2022` | fmt / test / clippy | 必須 |
-| `macos.yml` | `macos-15`（arm64） | plugin bundle のビルド | ベストエフォート |
+| `macos.yml` | `macos-15`（arm64） | `.plugin` バンドル 1 つのビルド | ベストエフォート |
 
 - トリガーはすべて `workflow_dispatch`。
 - **DLL だけ欲しいときは `Windows Build (DLL only)` を実行する。** モデル取得・tar.gz 同梱・presets コピー・zip 作成を行わない。
@@ -617,6 +618,7 @@ anyhow = "1"
 - `Swatinem/rust-cache@v2`。
 - CI のテストは MockBackend 中心。実モデルはオフラインレンダラで確認する。
 - Windows を優先し、macOS の失敗は v0.1.0 のリリースをブロックしない（README に明記）。
+- macOS は `.plugin` バンドル 1 artifact のみ。Windows のような DLL 単体／フルパッケージの分割はしない。
 
 ---
 

@@ -32,7 +32,7 @@ OBS Studio 用の音声フィルタプラグイン。DeepFilterNet3（DFN3）で
 
 - OBS Studio 32.2.1 以上（ビルドは 31.1.1 API）
 - Windows x64 または macOS arm64
-- モデルファイル 2 つ（合計約 43 MB）をプラグインの `models/` に配置
+- モデルファイル 2 つ（合計約 43 MB）。Windows の DLL 単体版を使う場合は別途配置。フルパッケージと macOS `.plugin` は同梱済み
 
 ## インストール（Windows）
 
@@ -66,11 +66,67 @@ v0.1.0 の Windows 配布物は未署名です。SmartScreen の警告が出る�
 
 ## インストール（macOS arm64・ベストエフォート）
 
-1. `obs-plugin_noise-cancelling.plugin` を
-   `~/Library/Application Support/obs-studio/plugins/` にコピーする。
-2. OBS を再起動する。
+macOS は **`.plugin` バンドル 1 つ**だけです。Windows のような DLL 単体版／フルパッケージ版の分けはありません。モデルとプリセットは `.plugin` 内に同梱されています。
 
-ad-hoc 署名済みです。配布用に Developer ID で署名する場合:
+### 1. ダウンロード
+
+1. GitHub Actions の `macOS Build` を実行する。
+2. artifact `obs-plugin_noise-cancelling-macos-arm64` をダウンロードする。
+3. zip を展開すると `obs-plugin_noise-cancelling.plugin` が出る。
+
+> GitHub Actions の artifact は常に zip でダウンロードされます。展開後の `.plugin` フォルダをそのまま配置してください。
+
+### 2. 配置
+
+ユーザー単位（推奨）:
+
+```bash
+mkdir -p "$HOME/Library/Application Support/obs-studio/plugins"
+cp -R obs-plugin_noise-cancelling.plugin "$HOME/Library/Application Support/obs-studio/plugins/"
+```
+
+全ユーザー:
+
+```bash
+sudo mkdir -p "/Library/Application Support/obs-studio/plugins"
+sudo cp -R obs-plugin_noise-cancelling.plugin "/Library/Application Support/obs-studio/plugins/"
+```
+
+`OBS.app/Contents/PlugIns/` への配置は OBS 更新で消えるため推奨しません。
+
+### 3. Gatekeeper
+
+ad-hoc 署名のため、初回にブロックされる場合があります。
+
+```bash
+xattr -dr com.apple.quarantine "$HOME/Library/Application Support/obs-studio/plugins/obs-plugin_noise-cancelling.plugin"
+codesign --verify --deep --strict --verbose=2 "$HOME/Library/Application Support/obs-studio/plugins/obs-plugin_noise-cancelling.plugin"
+```
+
+### 4. OBS を再起動
+
+OBS を再起動し、フィルタ一覧に「DeepFilterNet ノイズキャンセリング」が表示されれば成功です。
+
+### 5. アンインストール
+
+OBS を終了し、配置した `obs-plugin_noise-cancelling.plugin` を削除します。
+
+### `.plugin` の構成
+
+```text
+obs-plugin_noise-cancelling.plugin/
+└─ Contents/
+   ├─ Info.plist
+   ├─ MacOS/
+   │  └─ obs-plugin_noise-cancelling
+   └─ Resources/
+      ├─ presets/*.toml
+      └─ models/*.tar.gz
+```
+
+- 対応: macOS 12 以上 / Apple Silicon（arm64）。Intel Mac は対象外です。
+- モデル・プリセットを別途置く必要はありません。
+- Developer ID で署名する場合:
 
 ```bash
 CODESIGN_IDENTITY="Developer ID Application: ..." ./build-aux/package-macos.sh
@@ -185,12 +241,13 @@ cargo build -p obs-filter --release --target x86_64-pc-windows-msvc
 
 ### macOS
 
+macOS は **`.plugin` バンドル 1 つのみ**です。DLL 単体版のような分割はありません。
+
 ```bash
-# 配布用フルパッケージ（presets + models + plugin bundle）
 ./build-aux/package-macos.sh
 ```
 
-`dist/obs-plugin_noise-cancelling.plugin` が生成されます。
+`dist/obs-plugin_noise-cancelling.plugin` が生成されます。GitHub Actions の `macOS Build` も、この `.plugin` を 1 artifact として出力します。
 
 ### テスト
 
