@@ -24,9 +24,7 @@ OUT="$ROOT/dist/$MODULE.plugin"
 LIB="$ROOT/target/$TARGET_DIR/libobs_filter.dylib"
 MODELS="$ROOT/models"
 
-if [[ ! -f "$MODELS/DeepFilterNet3_ll_onnx.tar.gz" || ! -f "$MODELS/DeepFilterNet3_onnx.tar.gz" ]]; then
-  "$ROOT/scripts/fetch-models.sh" "$MODELS"
-fi
+"$ROOT/scripts/fetch-models.sh" "$MODELS"
 
 (
   cd "$ROOT"

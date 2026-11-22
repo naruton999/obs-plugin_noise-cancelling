@@ -1,0 +1,57 @@
+name: Windows Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build for Windows x64
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-x64
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run df-core tests
+        run: cargo test -p df-core
+
+      - name: Run obs-filter tests
+        run: cargo test -p obs-filter
+
+      - name: Run clippy
+        run: cargo clippy -p obs-filter --all-targets --target x86_64-pc-windows-msvc -- -D warnings
+
+      - name: Fetch models
+        run: ./scripts/fetch-models.ps1
+
+      - name: Build release DLL
+        run: cargo build -p obs-filter --release --target x86_64-pc-windows-msvc
+
+      - name: Package
+        run: ./build-aux/package-windows.ps1 -Configuration Release -SkipBuild
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-plugin_noise-cancelling-windows-x64
+          path: dist/windows/
+          if-no-files-found: error

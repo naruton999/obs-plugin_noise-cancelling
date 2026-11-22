@@ -37,14 +37,7 @@ if (-not (Test-Path $Dll)) {
 }
 
 $ModelsDir = Join-Path $Root 'models'
-$RequiredModels = @('DeepFilterNet3_ll_onnx.tar.gz', 'DeepFilterNet3_onnx.tar.gz')
-$MissingModels = $RequiredModels | Where-Object { -not (Test-Path (Join-Path $ModelsDir $_)) }
-if ($MissingModels.Count -gt 0) {
-    & (Join-Path $Root 'scripts/fetch-models.ps1') -Destination $ModelsDir
-    if ($LASTEXITCODE -ne 0) {
-        throw "model download failed with exit code $LASTEXITCODE"
-    }
-}
+& (Join-Path $Root 'scripts/fetch-models.ps1') -Destination $ModelsDir
 
 if (Test-Path $StageRoot) {
     Remove-Item -Recurse -Force $StageRoot
