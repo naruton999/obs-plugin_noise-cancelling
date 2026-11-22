@@ -6,11 +6,18 @@ license.workspace = true
 rust-version.workspace = true
 description = "DeepFilterNet noise suppression core for OBS"
 
+[features]
+default = []
+embed-ll = ["dep:df-models", "df-models/embed-ll"]
+embed-standard = ["dep:df-models", "df-models/embed-standard"]
+embed-models = ["embed-ll", "embed-standard"]
+
 [dependencies]
 deep_filter = { git = "https://github.com/Rikorose/DeepFilterNet", rev = "7b14b895fe7fc42cab72b4a4c1e49c982bd6404b", default-features = false, features = ["tract"] }
 ndarray = "0.15"
 anyhow = "1"
 rubato = "0.14"
+df-models = { path = "../df-models", optional = true }
 
 # deep_filter 0.5.7-pre is written against the tract 0.21.4 API. The tract
 # crates use caret requirements, so without an explicit exact pin a fresh

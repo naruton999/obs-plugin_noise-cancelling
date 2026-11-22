@@ -9,8 +9,7 @@ use std::time::Duration;
 
 use df_core::stereo::DelayLine;
 use df_core::{
-    DFN_HOP_SIZE, DenoiseParams, DfnBackend, Engine, MAX_BLOCK_FRAMES, ModelKind,
-    SUPPORTED_SAMPLE_RATES,
+    DFN_HOP_SIZE, DfnBackend, Engine, MAX_BLOCK_FRAMES, ModelKind, SUPPORTED_SAMPLE_RATES,
 };
 
 use crate::ffi::{
@@ -105,18 +104,34 @@ unsafe extern "C" fn get_name(_type_data: *mut c_void) -> *const c_char {
     c"DeepFilterNet ノイズキャンセリング".as_ptr()
 }
 
-unsafe extern "C" fn create(_settings: *mut ObsData, source: *mut ObsSource) -> *mut c_void {
+unsafe extern "C" fn create(settings: *mut ObsData, source: *mut ObsSource) -> *mut c_void {
     guard(ptr::null_mut(), || {
         let sample_rate = audio_sample_rate();
-        let settings = Settings {
-            denoise: DenoiseParams::default(),
-            model: ModelKind::LowLatency,
-            low_latency: false,
-            advanced: false,
-            sample_rate,
+        // OBS calls get_defaults() and create() when loading a filter; it does
+        // not call update() on load. Read the saved settings here so the DSP
+        // starts with the values from the scene collection.
+        let saved_settings = if settings.is_null() {
+            Settings {
+                sample_rate,
+                ..Settings::default()
+            }
+        } else {
+            unsafe { crate::ui::read_settings(settings, sample_rate) }
         };
+        log(
+            LOG_INFO,
+            &format!(
+                "create: model={} enabled={} mix={:.2} atten={:.1} low_latency={} bypass={}",
+                saved_settings.model.id(),
+                saved_settings.denoise.enabled,
+                saved_settings.denoise.mix,
+                saved_settings.denoise.attenuation_limit_db,
+                saved_settings.low_latency,
+                saved_settings.denoise.bypass
+            ),
+        );
         let shared = Arc::new(Shared {
-            params: AtomicParams::new(settings),
+            params: AtomicParams::new(saved_settings),
             status: AtomicU32::new(if is_supported_rate(sample_rate) {
                 STATUS_LOADING
             } else {
@@ -597,10 +612,8 @@ fn build_engine(
     model_paths: &ModelPaths,
     settings: Settings,
 ) -> anyhow::Result<(Engine, usize, usize)> {
-    let path = model_paths
-        .path(settings.model)
-        .ok_or_else(|| anyhow::anyhow!("model file not found for {}", settings.model.id()))?;
-    let backend = DfnBackend::from_file(path.clone())?;
+    let path = model_paths.path(settings.model).map(|path| path.as_path());
+    let backend = DfnBackend::from_model(settings.model, path)?;
     let mut engine = Engine::new(Box::new(backend), settings.sample_rate, MAX_BLOCK_FRAMES)?;
     engine.set_params(settings.denoise);
 

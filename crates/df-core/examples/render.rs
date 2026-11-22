@@ -65,7 +65,7 @@ fn main() -> Result<()> {
     }
 
     let mut engine = Engine::new(
-        Box::new(DfnBackend::from_file(&model_path)?),
+        Box::new(DfnBackend::from_model(model, Some(model_path.as_path()))?),
         spec.sample_rate,
         MAX_BLOCK_FRAMES,
     )

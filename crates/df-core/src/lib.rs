@@ -66,6 +66,14 @@ impl ModelKind {
     }
 }
 
+/// Whether the selected model is compiled into the binary.
+pub fn model_embedded(kind: ModelKind) -> bool {
+    match kind {
+        ModelKind::LowLatency => cfg!(feature = "embed-ll"),
+        ModelKind::Standard => cfg!(feature = "embed-standard"),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DenoiseParams {
     pub enabled: bool,
@@ -496,6 +504,18 @@ mod tests {
         assert_eq!(ModelKind::LowLatency.id(), "ll");
         assert_eq!(ModelKind::Standard.id(), "standard");
         assert_eq!(ModelKind::from_id("unknown"), None);
+    }
+
+    #[test]
+    fn embedded_flags_follow_features() {
+        assert_eq!(
+            model_embedded(ModelKind::LowLatency),
+            cfg!(feature = "embed-ll")
+        );
+        assert_eq!(
+            model_embedded(ModelKind::Standard),
+            cfg!(feature = "embed-standard")
+        );
     }
 
     #[test]

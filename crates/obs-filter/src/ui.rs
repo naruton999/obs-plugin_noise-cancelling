@@ -173,10 +173,11 @@ unsafe fn build_properties(
         );
         if !model_list.is_null() {
             for kind in [ModelKind::LowLatency, ModelKind::Standard] {
-                let missing = model_paths
-                    .path(kind)
-                    .map(|path| !path.is_file())
-                    .unwrap_or(true);
+                let missing = !df_core::model_embedded(kind)
+                    && model_paths
+                        .path(kind)
+                        .map(|path| !path.is_file())
+                        .unwrap_or(true);
                 let label = if missing {
                     format!("{}（未検出）", kind.label())
                 } else {
@@ -269,10 +270,11 @@ unsafe fn build_properties(
         let missing = [ModelKind::LowLatency, ModelKind::Standard]
             .iter()
             .any(|kind| {
-                model_paths
-                    .path(*kind)
-                    .map(|path| !path.is_file())
-                    .unwrap_or(true)
+                !df_core::model_embedded(*kind)
+                    && model_paths
+                        .path(*kind)
+                        .map(|path| !path.is_file())
+                        .unwrap_or(true)
             });
         if missing {
             add_info(
@@ -442,7 +444,7 @@ unsafe extern "C" fn apply_preset(
     })
 }
 
-unsafe fn read_settings(data: *mut ObsData, sample_rate: u32) -> Settings {
+pub(crate) unsafe fn read_settings(data: *mut ObsData, sample_rate: u32) -> Settings {
     let denoise = DenoiseParams {
         enabled: unsafe { ffi::obs_data_get_bool(data, c"enabled".as_ptr()) },
         attenuation_limit_db: unsafe {
