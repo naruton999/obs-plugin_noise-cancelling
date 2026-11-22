@@ -215,6 +215,7 @@ unsafe extern "C" fn filter_audio(
             side.ready = false;
             drain_output(side);
             acknowledge_prime(&filter.shared);
+            wake_worker(filter);
             return audio;
         }
         if status != STATUS_READY {
@@ -225,6 +226,7 @@ unsafe extern "C" fn filter_audio(
                 drain_output(side);
                 acknowledge_prime(&filter.shared);
             }
+            wake_worker(filter);
             return audio;
         }
 
@@ -257,6 +259,7 @@ unsafe extern "C" fn filter_audio(
             side.ready = false;
             drain_output(side);
             acknowledge_prime(&filter.shared);
+            wake_worker(filter);
             return audio;
         }
 
@@ -302,8 +305,15 @@ unsafe extern "C" fn filter_audio(
                 .fetch_add(overruns, Ordering::Relaxed);
         }
 
+        wake_worker(filter);
         audio
     })
+}
+
+fn wake_worker(filter: &FilterData) {
+    if let Some(worker) = filter.worker.as_ref() {
+        worker.thread.unpark();
+    }
 }
 
 fn process_mono(side: &mut AudioSide, buffer: &mut [f32], underruns: &mut u64, overruns: &mut u64) {
