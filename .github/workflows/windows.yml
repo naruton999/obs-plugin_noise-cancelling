@@ -58,7 +58,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Package
-        run: ./build-aux/package-windows.ps1 -Configuration Release -SkipBuild -EmbedModels:${{ inputs.embed_models }}
+        run: |
+          $embedModels = '${{ inputs.embed_models }}' -eq 'true'
+          ./build-aux/package-windows.ps1 -Configuration Release -SkipBuild -EmbedModels:$embedModels
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
