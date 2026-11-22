@@ -612,8 +612,10 @@ fn build_engine(
     model_paths: &ModelPaths,
     settings: Settings,
 ) -> anyhow::Result<(Engine, usize, usize)> {
-    let path = model_paths.path(settings.model).map(|path| path.as_path());
-    let backend = DfnBackend::from_model(settings.model, path)?;
+    let path = model_paths
+        .path(settings.model)
+        .ok_or_else(|| anyhow::anyhow!("model file not found for {}", settings.model.id()))?;
+    let backend = DfnBackend::from_file(path)?;
     let mut engine = Engine::new(Box::new(backend), settings.sample_rate, MAX_BLOCK_FRAMES)?;
     engine.set_params(settings.denoise);
 

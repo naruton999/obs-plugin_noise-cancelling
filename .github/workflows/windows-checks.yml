@@ -1,0 +1,41 @@
+name: Windows Checks
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Format, test, clippy
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-checks
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run df-core tests
+        run: cargo test -p df-core
+
+      - name: Run obs-filter tests
+        run: cargo test -p obs-filter
+
+      - name: Run clippy
+        run: cargo clippy -p obs-filter --all-targets --target x86_64-pc-windows-msvc -- -D warnings

@@ -205,7 +205,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "deep_filter",
- "df-models",
  "hound",
  "ndarray",
  "rubato",
@@ -217,10 +216,6 @@ dependencies = [
  "tract-onnx",
  "tract-pulse",
 ]
-
-[[package]]
-name = "df-models"
-version = "0.1.0"
 
 [[package]]
 name = "dlv-list"

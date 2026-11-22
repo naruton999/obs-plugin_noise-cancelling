@@ -3,18 +3,14 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG=release
-EMBED_MODELS="${EMBED_MODELS:-0}"
 
 for arg in "$@"; do
   case "$arg" in
     debug|release)
       CONFIG="$arg"
       ;;
-    --embed-models)
-      EMBED_MODELS=1
-      ;;
     *)
-      echo "usage: $0 [debug|release] [--embed-models]" >&2
+      echo "usage: $0 [debug|release]" >&2
       exit 1
       ;;
   esac
@@ -40,23 +36,15 @@ MODELS="$ROOT/models"
 
 (
   cd "$ROOT"
-  if [[ "$EMBED_MODELS" == "1" ]]; then
-    cargo build -p obs-filter --profile "$PROFILE" --features embed-models
-  else
-    cargo build -p obs-filter --profile "$PROFILE"
-  fi
+  cargo build -p obs-filter --profile "$PROFILE"
 )
 
 rm -rf "$OUT"
 mkdir -p "$OUT/Contents/MacOS" "$OUT/Contents/Resources/presets"
 cp "$LIB" "$OUT/Contents/MacOS/$MODULE"
 cp "$ROOT"/presets/*.toml "$OUT/Contents/Resources/presets/"
-if [[ "$EMBED_MODELS" == "1" ]]; then
-  echo "models: embedded in $MODULE"
-else
-  mkdir -p "$OUT/Contents/Resources/models"
-  cp "$ROOT"/models/*.tar.gz "$OUT/Contents/Resources/models/"
-fi
+mkdir -p "$OUT/Contents/Resources/models"
+cp "$ROOT"/models/*.tar.gz "$OUT/Contents/Resources/models/"
 
 cat > "$OUT/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

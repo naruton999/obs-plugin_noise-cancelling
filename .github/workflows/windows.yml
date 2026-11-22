@@ -2,15 +2,6 @@ name: Windows Build
 
 on:
   workflow_dispatch:
-    inputs:
-      embed_models:
-        description: "Embed both DeepFilterNet models in the DLL"
-        type: boolean
-        default: false
-      dll_only:
-        description: "Upload only the DLL (no presets/models/zip)"
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -29,48 +20,23 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
           key: windows-x64
 
-      - name: Check formatting
-        run: cargo fmt --check
-
-      - name: Run df-core tests
-        run: cargo test -p df-core
-
-      - name: Run obs-filter tests
-        run: cargo test -p obs-filter
-
-      - name: Run clippy
-        run: cargo clippy -p obs-filter --all-targets --target x86_64-pc-windows-msvc -- -D warnings
-
-      - name: Fetch models
-        if: ${{ inputs.embed_models || !inputs.dll_only }}
-        run: ./scripts/fetch-models.ps1
-
       - name: Build release DLL
-        run: |
-          $features = @()
-          if ("${{ inputs.embed_models }}" -eq "true") {
-            $features = @("--features", "embed-models")
-          }
-          cargo build -p obs-filter --release --target x86_64-pc-windows-msvc @features
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        run: cargo build -p obs-filter --release --target x86_64-pc-windows-msvc
 
-      - name: Package
+      - name: Prepare DLL
         run: |
-          $embedModels = '${{ inputs.embed_models }}' -eq 'true'
-          $dllOnly = '${{ inputs.dll_only }}' -eq 'true'
-          ./build-aux/package-windows.ps1 -Configuration Release -SkipBuild -EmbedModels:$embedModels -DllOnly:$dllOnly
+          New-Item -ItemType Directory -Force -Path dist/windows | Out-Null
+          Copy-Item target/x86_64-pc-windows-msvc/release/obs_filter.dll dist/windows/obs-plugin_noise-cancelling.dll
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: obs-plugin_noise-cancelling-windows-x64${{ inputs.dll_only && '-dll-only' || '' }}
+          name: obs-plugin_noise-cancelling-windows-x64-dll
           path: dist/windows/
           if-no-files-found: error

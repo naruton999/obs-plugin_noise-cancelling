@@ -175,11 +175,10 @@ unsafe fn build_properties(
         );
         if !model_list.is_null() {
             for kind in [ModelKind::LowLatency, ModelKind::Standard] {
-                let missing = !df_core::model_embedded(kind)
-                    && model_paths
-                        .path(kind)
-                        .map(|path| !path.is_file())
-                        .unwrap_or(true);
+                let missing = model_paths
+                    .path(kind)
+                    .map(|path| !path.is_file())
+                    .unwrap_or(true);
                 let label = if missing {
                     format!("{}（未検出）", kind.label())
                 } else {
@@ -289,11 +288,10 @@ unsafe fn build_properties(
         let missing = [ModelKind::LowLatency, ModelKind::Standard]
             .iter()
             .any(|kind| {
-                !df_core::model_embedded(*kind)
-                    && model_paths
-                        .path(*kind)
-                        .map(|path| !path.is_file())
-                        .unwrap_or(true)
+                model_paths
+                    .path(*kind)
+                    .map(|path| !path.is_file())
+                    .unwrap_or(true)
             });
         if missing {
             add_info(

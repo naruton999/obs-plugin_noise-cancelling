@@ -13,9 +13,6 @@ crate-type = ["cdylib"]
 # Local type-checking on unsupported hosts (for example Linux CI). Do not
 # enable this for release builds; the real plugin only supports macOS/Windows.
 check-only = []
-embed-ll = ["df-core/embed-ll"]
-embed-standard = ["df-core/embed-standard"]
-embed-models = ["embed-ll", "embed-standard"]
 
 [dependencies]
 df-core = { path = "../df-core" }

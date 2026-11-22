@@ -1,16 +1,16 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use df::tract::{DfParams, DfTract, RuntimeParams};
 use ndarray::Array2;
 
+use crate::DenoiseParams;
 use crate::backend::Backend;
-use crate::{DenoiseParams, ModelKind};
 
 /// DeepFilterNet always runs at 48 kHz.
 pub const DFN_SAMPLE_RATE: u32 = 48_000;
 
-/// DeepFilterNet3 backend using an external or embedded `.tar.gz` model.
+/// DeepFilterNet3 backend using an external `.tar.gz` model.
 pub struct DfnBackend {
     df: DfTract,
     noisy: Array2<f32>,
@@ -20,33 +20,10 @@ pub struct DfnBackend {
 }
 
 impl DfnBackend {
-    /// Load the selected model from the compile-time embedded blob when the
-    /// corresponding `embed-*` feature is enabled, otherwise from `path`.
-    pub fn from_model(kind: ModelKind, path: Option<&Path>) -> Result<Self> {
-        #[cfg(feature = "embed-ll")]
-        if kind == ModelKind::LowLatency {
-            return Self::from_bytes(df_models::LOW_LATENCY)
-                .context("parse embedded low-latency model");
-        }
-
-        #[cfg(feature = "embed-standard")]
-        if kind == ModelKind::Standard {
-            return Self::from_bytes(df_models::STANDARD).context("parse embedded standard model");
-        }
-
-        let path = path.ok_or_else(|| anyhow::anyhow!("model file not found for {}", kind.id()))?;
-        Self::from_file(path)
-    }
-
     pub fn from_file(path: impl Into<PathBuf>) -> Result<Self> {
         let path = path.into();
         let params = DfParams::new(path.clone())
             .with_context(|| format!("open DeepFilterNet model: {}", path.display()))?;
-        Self::from_params(params)
-    }
-
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        let params = DfParams::from_bytes(bytes).context("parse DeepFilterNet model bytes")?;
         Self::from_params(params)
     }
 
