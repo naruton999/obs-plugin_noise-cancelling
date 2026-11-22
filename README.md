@@ -91,7 +91,7 @@ macOS は v0.1.0 ではベストエフォートです。Windows での動作確�
 | LL（低遅延） | `DeepFilterNet3_ll_onnx.tar.gz` | 36,359,660 bytes | 約 10 ms | 低遅延。CPU/メモリは大きめ |
 | 標準（高品質） | `DeepFilterNet3_onnx.tar.gz` | 7,983,136 bytes | 約 30 ms | 高品質。低 CPU/メモリ |
 
-モデルはバイナリに埋め込まず、`models/` から読み込みます。モデル切替には数秒かかり、切替中は乾音になります。
+既定ではモデルをバイナリに埋め込まず、`models/` から読み込みます。ビルド時に `embed-ll` / `embed-standard` / `embed-models` を指定すると、モデルを DLL / `.plugin` に埋め込めます。モデル切替には数秒かかり、切替中は乾音になります。
 
 ### 遅延モード
 
@@ -115,6 +115,10 @@ macOS は v0.1.0 ではベストエフォートです。Windows での動作確�
 
 プリセットは DSP パラメータのみを変更します。モデルと低遅延モードは変更しません。
 
+### 設定の保存
+
+低減量、ミックス、モデル、低遅延モード、しきい値などは OBS のシーンコレクションに保存されます。OBS 再起動時は `create()` で保存済み設定を読み直すため、前回の設定で復元されます。
+
 ## ビルド
 
 ### モデルの取得
@@ -131,11 +135,34 @@ Windows:
 
 `models/` に 2 つの tar.gz をダウンロードし、SHA256 を検証します。`models/` は git 管理外です。
 
+### モデルの埋め込み
+
+既定は外部モデルです。モデルを DLL / `.plugin` に埋め込む場合は、以下のフィーチャーを使います。
+
+| ビルド | コマンド | バイナリ増加 | 実行時の `models/` |
+|---|---|---|---|
+| 外部モデル（既定） | `cargo build -p obs-filter --release` | なし | 必要 |
+| LL のみ埋め込み | `--features embed-ll` | 約 36 MB | LL は不要 |
+| 標準のみ埋め込み | `--features embed-standard` | 約 8 MB | 標準は不要 |
+| 両方埋め込み | `--features embed-models` | 約 44 MB | 不要 |
+
+- 埋め込みビルドでも、**コンパイル時**に `models/` の tar.gz が必要です（`include_bytes!` のため）。先に `scripts/fetch-models.*` を実行してください。
+- モデルは `crates/df-models` に分離されています。モデルが変わらなければ、`df-core` / `obs-filter` のコード変更時にモデルを再コンパイルせず、コンパイル済みの `df-models` を再利用します。
+- 埋め込み時はパッケージに `data/models` / `Contents/Resources/models` を含めません。
+- パッケージ scripts:
+  - Windows: `./build-aux/package-windows.ps1 -Configuration Release -EmbedModels`
+  - macOS: `./build-aux/package-macos.sh --embed-models`
+- GitHub Actions の手動実行には `embed_models` 入力があります。
+
 ### Windows
 
 ```powershell
+# 外部モデル（既定）
 cargo build -p obs-filter --release --target x86_64-pc-windows-msvc
 ./build-aux/package-windows.ps1 -Configuration Release -SkipBuild
+
+# 両方埋め込み
+./build-aux/package-windows.ps1 -Configuration Release -EmbedModels
 ```
 
 `dist/obs-plugin_noise-cancelling-windows-x64.zip` が生成されます。
@@ -143,8 +170,12 @@ cargo build -p obs-filter --release --target x86_64-pc-windows-msvc
 ### macOS
 
 ```bash
+# 外部モデル（既定）
 cargo build -p obs-filter --release
 ./build-aux/package-macos.sh
+
+# 両方埋め込み
+./build-aux/package-macos.sh --embed-models
 ```
 
 `dist/obs-plugin_noise-cancelling.plugin` が生成されます。
@@ -191,9 +222,10 @@ cargo run -p df-core --release --example make_test_wav -- target/test_noisy.wav 
 ```text
 obs-plugin_noise-cancelling/
 ├─ crates/df-core/      # DeepFilterNet、FIFO、リサンプル、プリセット、WAV レンダラ
+├─ crates/df-models/    # 埋め込みモデル専用（オプション）
 ├─ crates/obs-filter/   # OBS FFI、ワーカー、SPSC、UI
 ├─ presets/             # 同梱プリセット
-├─ models/              # 取得したモデル（git 管理外）
+├─ models/              # 取得したモデル（git 管理外。埋め込みビルドでもコンパイル時に必要）
 ├─ scripts/             # モデル取得
 ├─ build-aux/           # パッケージ
 ├─ docs/01-noise-cancelling.md
@@ -207,7 +239,8 @@ CI 設定・ディレクトリ構成・README の構成は `naruton999/obs-plugi
 | 症状 | 確認事項 |
 |---|---|
 | フィルタ一覧に出ない | DLL / `.plugin` の配置、OBS の再起動、アーキテクチャ（x64 / arm64） |
-| 「モデル読込失敗」 | `models/` に 2 つの tar.gz があるか。SHA256 が一致するか |
+| 「モデル読込失敗」 | `models/` に 2 つの tar.gz があるか。SHA256 が一致するか。埋め込みビルドならモデル選択が埋め込み対象か |
+| 設定が再起動で戻る | 最新ビルドか。`create()` で保存設定を読む修正が入っています |
 | 44.1 kHz で動かない | OBS の音声設定が 44.1 kHz か 48 kHz か。UI のレート表示を確認 |
 | 音が遅れる | UI の概算遅延を確認。1 hop モードを試す。標準モデルは LL より遅い |
 | 音切れする | 2 hop モードを使う。CPU 使用率を確認 |

@@ -92,11 +92,15 @@ obs-plugin_noise-cancelling/
 │  │  ├─ src/
 │  │  │  ├─ lib.rs          # DenoiseParams, Engine, Denoiser, tests
 │  │  │  ├─ backend.rs      # Backend trait
-│  │  │  ├─ dfn.rs          # DeepFilterNet backend（外部モデル）
+│  │  │  ├─ dfn.rs          # DeepFilterNet backend（外部/埋め込みモデル）
 │  │  │  ├─ resample.rs     # 44.1k <-> 48k（rubato）
 │  │  │  ├─ preset.rs       # TOML プリセット
 │  │  │  └─ stereo.rs       # Mid/Side ヘルパー
 │  │  └─ examples/render.rs # オフライン WAV レンダラ
+│  ├─ df-models/           # 埋め込みモデル専用（オプション）
+│  │  ├─ Cargo.toml
+│  │  ├─ build.rs
+│  │  └─ src/lib.rs
 │  └─ obs-filter/
 │     ├─ Cargo.toml
 │     ├─ build.rs
@@ -142,6 +146,7 @@ obs-plugin_noise-cancelling/
 - OBS FFI は `libobs` の公開 API 宣言（`obs-source.h` 等）を元に新規作成する。
 - `deep_filter` の pre-1.0 API は `dfn.rs` に閉じ込める。
 - `df-core` は OBS 非依存。Linux でもテスト可能。
+- 埋め込みモデルは `df-models` に分離し、モデルが変わらない限り再コンパイルしない。
 
 ---
 
@@ -176,10 +181,16 @@ obs-plugin_noise-cancelling/
 | LL（低遅延） | `DeepFilterNet3_ll_onnx.tar.gz` | 36,359,660 bytes | 約 10 ms | 低遅延。パラメータ多め |
 | 標準（高品質） | `DeepFilterNet3_onnx.tar.gz` | 7,983,136 bytes | 約 30 ms | 高品質。低 CPU/メモリ |
 
-- モデルは **外部ファイル**として `models/` に置き、配布物に同梱する。バイナリには埋め込まない。
+- 既定は **外部ファイル**として `models/` に置き、配布物に同梱する。
+- ビルド時に埋め込みを選択できる:
+  - `--features embed-ll`（LL のみ）
+  - `--features embed-standard`（標準のみ）
+  - `--features embed-models`（両方）
+- 埋め込みモデルは `df-models` クレートに分離する。モデルが変わらなければ `df-core` / `obs-filter` の変更時に再コンパイルされない。
+- 埋め込みビルドでも **コンパイル時**に `models/` の tar.gz が必要。無い場合は `df-models/build.rs` が分かりやすいエラーを出す。
 - 取得元: DeepFilterNet commit `7b14b895fe7fc42cab72b4a4c1e49c982bd6404b` の `models/`。
 - SHA256 を `scripts/fetch-models.*` と CI で検証する。
-- モデルが見つからない場合は UI に警告を出し、ステータスを `failed` にする。
+- 埋め込みモデルは UI の「未検出」警告の対象外。外部モデルが無い場合は UI に警告を出し、ステータスを `failed` にする。
 - モデル切替はワーカースレッドで行う。切替中は乾音を出し、UI に「モデル切替中」を表示する。
 - モデルは MIT / Apache-2.0。`THIRD_PARTY_NOTICES.md` に記載する。
 
@@ -282,7 +293,9 @@ pub enum Engine {
 
 ### 5.4 `DfnBackend`
 
-- `DfParams::new(path)` で外部モデルを読む。`DfParams::from_bytes` もサポート。
+- `from_model(kind, path)` で、埋め込み対象なら `df_models` のバイト列を `DfParams::from_bytes` に渡し、そうでなければ外部ファイルを読む。
+- `DfParams::new(path)` / `DfParams::from_bytes` をサポート。
+- `model_embedded(kind)` で埋め込み対象かを公開する。UI の未検出警告はこれを見る。
 - `RuntimeParams::default_with_ch(1)` を使用。
 - `hop_size = df.hop_size`（通常 480）。
 - `latency_samples = (df.lookahead + 1) * hop`。
@@ -394,6 +407,9 @@ struct AudioSide {
     channels: usize,
 }
 ```
+
+- OBS はフィルタのロード時に `get_defaults()` → `create()` を呼び、`update()` は呼ばない。`create()` で保存済み `obs_data_t` を `read_settings()` して `AtomicParams` の初期値にする（設定復元）。
+- `update()` はプロパティ変更時の反映に使う。
 
 | 状態 | 音声出力 | UI |
 |---|---|---|
@@ -517,11 +533,18 @@ codegen-units = 1
 `df-core`:
 
 ```toml
+[features]
+default = []
+embed-ll = ["dep:df-models", "df-models/embed-ll"]
+embed-standard = ["dep:df-models", "df-models/embed-standard"]
+embed-models = ["embed-ll", "embed-standard"]
+
 [dependencies]
 deep_filter = { git = "https://github.com/Rikorose/DeepFilterNet", rev = "7b14b895fe7fc42cab72b4a4c1e49c982bd6404b", default-features = false, features = ["tract"] }
 ndarray = "0.15"
 anyhow = "1"
 rubato = "0.14"
+df-models = { path = "../df-models", optional = true }
 
 # deep_filter 0.5.7-pre は tract 0.21.4 API を前提とする。caret 解決で
 # 0.21.19 が選ばれると API 不整合になるため、tract 系を exact pin する。
@@ -545,6 +568,9 @@ crate-type = ["cdylib"]
 
 [features]
 check-only = []  # Linux などでのローカル型チェック専用
+embed-ll = ["df-core/embed-ll"]
+embed-standard = ["df-core/embed-standard"]
+embed-models = ["embed-ll", "embed-standard"]
 
 [dependencies]
 df-core = { path = "../df-core" }
@@ -552,7 +578,9 @@ rtrb = "0.3"
 anyhow = "1"
 ```
 
-- モデルは外部ファイル。`default-model-ll` などの埋め込み feature は使わない。
+- 既定は外部モデル。`embed-ll` / `embed-standard` / `embed-models` で埋め込みを選択。
+- 埋め込みバイト列は `df-models` に分離し、モデルが変わらない限り再コンパイルしない。
+- `default-model-ll` などの `deep_filter` 側の埋め込み feature は使わない。
 - `Cargo.lock` をコミットする。
 
 ### 8.2 モデル取得
@@ -568,9 +596,12 @@ anyhow = "1"
 
 | OS | 出力 | 内容 |
 |---|---|---|
-| Windows | `dist/obs-plugin_noise-cancelling-windows-x64.zip` | `obs-plugin_noise-cancelling/obs-plugin_noise-cancelling.dll` + `data/presets/*.toml` + `data/models/*.tar.gz` |
-| macOS | `dist/obs-plugin_noise-cancelling.plugin` | `Contents/MacOS/obs-plugin_noise-cancelling` + `Contents/Resources/presets/*.toml` + `Contents/Resources/models/*.tar.gz` |
+| Windows | `dist/obs-plugin_noise-cancelling-windows-x64.zip` | `obs-plugin_noise-cancelling/obs-plugin_noise-cancelling.dll` + `data/presets/*.toml` + 外部モデル時のみ `data/models/*.tar.gz` |
+| macOS | `dist/obs-plugin_noise-cancelling.plugin` | `Contents/MacOS/obs-plugin_noise-cancelling` + `Contents/Resources/presets/*.toml` + 外部モデル時のみ `Contents/Resources/models/*.tar.gz` |
 
+- 外部モデル（既定）: `package-windows.ps1` / `package-macos.sh`。
+- 両方埋め込み: Windows `-EmbedModels`、macOS `--embed-models`（または `EMBED_MODELS=1`）。`data/models` / `Contents/Resources/models` は同梱しない。
+- 埋め込みビルドでもコンパイル時に `models/` が必要。パッケージ scripts は先に `fetch-models` を実行する。
 - Windows OBS 33 以降: `C:\ProgramData\obs-studio\plugins\obs-plugin_noise-cancelling\`。
 - Windows OBS 32.x / 旧配置: DLL を `obs-plugins\64bit\`、data を `data\obs-plugins\obs-plugin_noise-cancelling\`。
 - macOS: `~/Library/Application Support/obs-studio/plugins/` または `OBS.app/Contents/PlugIns/`。
@@ -584,8 +615,9 @@ anyhow = "1"
 | `windows.yml` | `windows-2022` | 必須 |
 | `macos.yml` | `macos-15`（arm64） | ベストエフォート |
 
-- トリガーは `workflow_dispatch`。
-- fmt / `cargo test -p df-core` / `cargo test -p obs-filter` / clippy / release build / fetch models / package / upload。
+- トリガーは `workflow_dispatch`。入力 `embed_models`（boolean、既定 false）で両方埋め込みを選択。
+- fmt / `cargo test -p df-core` / `cargo test -p obs-filter` / clippy / fetch models / release build / package / upload。
+- `embed_models=true` のときは `--features embed-models` でビルドし、パッケージにモデルを同梱しない。
 - `Swatinem/rust-cache@v2`。
 - CI のテストは MockBackend 中心。実モデルはオフラインレンダラで確認する。
 - Windows を優先し、macOS の失敗は v0.1.0 のリリースをブロックしない（README に明記）。
@@ -609,6 +641,7 @@ anyhow = "1"
 | `enabled_is_immediate_passthrough` | `enabled=false` で遅延 0 |
 | `resample_44k_roundtrip` | 44.1k → 48k → 44.1k でサンプル数・波形が破綻しない |
 | `model_kind_ids` | `ll` / `standard` の相互変換 |
+| `embedded_flags_follow_features` | `embed-*` フィーチャーと `model_embedded()` の一致 |
 | `stereo_mid_side` | Mid/Side の往復、左右同一、左のみ |
 | `preset_parse_*` | 同梱プリセット、未知フィールド、schema エラー |
 
@@ -644,6 +677,8 @@ anyhow = "1"
 | AC-15 | モノラル、同一ステレオ、左のみステレオで破綻しない |
 | AC-16 | オフライン WAV レンダラで入出力 WAV を生成できる |
 | AC-17 | macOS arm64 はビルド・起動をベストエフォートで確認する |
+| AC-18 | 外部モデル / `embed-ll` / `embed-standard` / `embed-models` の各ビルドが成立する |
+| AC-19 | 低減量・ミックス・モデル・低遅延モードなどが OBS 再起動後も復元される |
 
 ### 9.4 手動確認
 
@@ -697,7 +732,10 @@ OBS の音声ブロック（約 21 ms）は上記に含まない。いずれも�
 | tract の初期化が重い | ワーカーで初期化。準備まで乾音。UI に読込中表示 |
 | 44.1k リサンプルで遅延/CPU 増 | 低遅延 sinc、実測、低遅延モード |
 | LL モデルの CPU/メモリ | 標準モデルを選択可能。実測して README に記載 |
-| モデル 2 種で配布物が大きい | 外部ファイル。zip/plugin に同梱。README にサイズ記載 |
+| モデル 2 種で配布物が大きい | 外部ファイルを既定に。埋め込みは `embed-*` で選択。README にサイズ記載 |
+| 埋め込みモデルでバイナリ増 | 外部モデルを既定に。`df-models` 分離で再コンパイルを抑制 |
+| 埋め込みビルドで `models/` 必須 | `df-models/build.rs` が明示エラー。README に取得手順 |
+| 設定が再起動で戻る | `create()` で保存済み `obs_data_t` を `read_settings()` する（修正済み） |
 | モデル切替中の音切れ | 乾音＋短い無音（クロスフェードは v0.2）。UI に切替中表示 |
 | アンダーラン | 2 hop 既定＋乾音フォールバック。1 hop は上級者向け |
 | pre-1.0 API | commit 固定。`dfn.rs` に隔離 |
@@ -715,7 +753,8 @@ OBS の音声ブロック（約 21 ms）は上記に含まない。いずれも�
 | P0 | 仕様、ブランチ、workspace、LICENSE、NOTICES、.gitignore、handoff 移動 | 完了 |
 | P1 | `df-core`（Backend、Denoiser、Resampling、Preset、Mock テスト、WAV レンダラ） | 完了。LL 48 kHz / 標準 44.1 kHz の実モデルで WAV 出力を確認 |
 | P2 | `obs-filter`（FFI、worker、UI、models、presets） | 完了。Linux `check-only` で型チェック・clippy 済み |
-| P3 | パッケージ、CI、README、実機/オフライン確認 | 一部完了。Windows/macOS 実機ビルド、OBS 実機、ユーザー提供 WAV の確認は未 |
+| P3 | パッケージ、CI、README、実機/オフライン確認 | 一部完了。ユーザー環境の OBS でノイズ抑制動作を確認済み。macOS 実機、ユーザー提供 WAV は未 |
+| P4 | 設定復元（`create` で保存設定を読む）とモデル埋め込み（`df-models` + `embed-*`） | 実装・ビルド・テスト完了。OBS 再起動での設定復元確認は未 |
 
 - ブランチは `feature/ai-0001-noise-cancelling`。完了までこのブランチで作業する。
 - コミットは `AI <ai@example.com>` 名義。
