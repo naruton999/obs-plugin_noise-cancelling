@@ -587,7 +587,7 @@ anyhow = "1"
 - トリガーは `workflow_dispatch`。
 - fmt / `cargo test -p df-core` / `cargo test -p obs-filter` / clippy / release build / fetch models / package / upload。
 - `Swatinem/rust-cache@v2`。
-- 実モデルのスモークテストは `#[ignore]`。
+- CI のテストは MockBackend 中心。実モデルはオフラインレンダラで確認する。
 - Windows を優先し、macOS の失敗は v0.1.0 のリリースをブロックしない（README に明記）。
 
 ---
