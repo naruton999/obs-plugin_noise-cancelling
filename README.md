@@ -158,9 +158,16 @@ cargo build -p obs-filter --release --target x86_64-pc-windows-msvc
 
 プリセットは DLL に内蔵されています（`presets/*.toml` を `include_str!`）。実行時に必要なのは DLL と外部モデルだけです。OBS のデータフォルダへ `models/*.tar.gz` を置いてください。
 
-**GitHub Actions の Windows Build は DLL のみです。** モデル取得・tar.gz 同梱・zip 作成は行わず、リリース DLL を artifact にします。テストと clippy は `Windows Checks` という別ワークフローで実行します。
+**GitHub Actions の Windows Build は、1 回の実行で次の 2 つの artifact を出力します。**
 
-フルパッケージ（presets + models + zip）が必要なときは、ローカルで `package-windows.ps1` を実行します。この script はモデルを取得して同梱します。
+| artifact | 内容 |
+|---|---|
+| `obs-plugin_noise-cancelling-windows-x64-dll` | DLL のみ |
+| `obs-plugin_noise-cancelling-windows-x64-full` | DLL + `data/presets/*.toml` + `data/models/*.tar.gz` |
+
+- DLL のみはモデル取得・同梱・zip 作成を行いません。
+- フルは `package-windows.ps1` を呼び、モデル 2 種とプリセット 5 種を同梱します。ダウンロードした zip を展開すると `obs-plugin_noise-cancelling/` がそのまま使えます。
+- テストと clippy は `Windows Checks` という別ワークフローで実行します。
 
 > DLL のみにしても Rust / tract のコンパイル時間はほとんど変わりません。短縮されるのはモデル取得・コピー・zip 作成の部分だけです。
 

@@ -29,14 +29,24 @@ jobs:
       - name: Build release DLL
         run: cargo build -p obs-filter --release --target x86_64-pc-windows-msvc
 
-      - name: Prepare DLL
+      - name: Prepare DLL-only artifact
         run: |
-          New-Item -ItemType Directory -Force -Path dist/windows | Out-Null
-          Copy-Item target/x86_64-pc-windows-msvc/release/obs_filter.dll dist/windows/obs-plugin_noise-cancelling.dll
+          New-Item -ItemType Directory -Force -Path dist/dll | Out-Null
+          Copy-Item target/x86_64-pc-windows-msvc/release/obs_filter.dll dist/dll/obs-plugin_noise-cancelling.dll
 
-      - name: Upload artifact
+      - name: Upload DLL-only artifact
         uses: actions/upload-artifact@v4
         with:
           name: obs-plugin_noise-cancelling-windows-x64-dll
-          path: dist/windows/
+          path: dist/dll/
+          if-no-files-found: error
+
+      - name: Build full package
+        run: ./build-aux/package-windows.ps1 -Configuration Release -SkipBuild
+
+      - name: Upload full package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-plugin_noise-cancelling-windows-x64-full
+          path: dist/windows/obs-plugin_noise-cancelling/
           if-no-files-found: error
