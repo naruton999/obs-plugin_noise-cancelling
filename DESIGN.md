@@ -67,7 +67,7 @@ OBS Studio の音声フィルタとして、マイクに入る定常ノイズ（
 | 表示名 | `DeepFilterNet ノイズキャンセリング` |
 | Cargo パッケージ | `df-core` / `obs-filter` |
 | cdylib 出力 | `obs_filter.dll` / `libobs_filter.dylib`（パッケージ時にリネーム） |
-| CI artifact（Win） | `obs-plugin_noise-cancelling-windows-x64-dll`（DLL のみ） / `obs-plugin_noise-cancelling-windows-x64-full`（全部込み） |
+| CI artifact（Win） | `obs-plugin_noise-cancelling-windows-x64-dll`（Windows Build (DLL only)） / `obs-plugin_noise-cancelling-windows-x64-full`（Windows Build (Full package)） |
 | CI artifact（mac） | `obs-plugin_noise-cancelling-macos-arm64` |
 | macOS Bundle ID | `com.naruton999.obs-plugin-noise-cancelling` |
 
@@ -126,7 +126,8 @@ obs-plugin_noise-cancelling/
 ├─ DESIGN.md                # 設計仕様（公開）
 ├─ docs/                    # ローカル専用（git 管理外）
 ├─ .github/workflows/
-│  ├─ windows.yml          # DLL のみ + フルパッケージの 2 artifact
+│  ├─ windows.yml          # Windows Build (DLL only)
+│  ├─ windows-full.yml     # Windows Build (Full package)
 │  ├─ windows-checks.yml   # fmt / test / clippy
 │  └─ macos.yml
 └─ third_party/
@@ -603,15 +604,14 @@ anyhow = "1"
 
 | ワークフロー | ランナー | 役割 | 必須度 |
 |---|---|---|---|
-| `windows.yml` | `windows-2022` | DLL のみ + フルパッケージの 2 artifact を出力 | 必須 |
+| `windows.yml`（`Windows Build (DLL only)`） | `windows-2022` | DLL のみビルドして artifact 化 | 必須 |
+| `windows-full.yml`（`Windows Build (Full package)`） | `windows-2022` | DLL + presets + models のフルパッケージを artifact 化 | 必須 |
 | `windows-checks.yml` | `windows-2022` | fmt / test / clippy | 必須 |
 | `macos.yml` | `macos-15`（arm64） | plugin bundle のビルド | ベストエフォート |
 
 - トリガーはすべて `workflow_dispatch`。
-- `windows.yml` は 1 回のビルドで 2 つの artifact を出力する。
-  - `obs-plugin_noise-cancelling-windows-x64-dll`: **DLL のみ**。モデル取得・tar.gz 同梱・presets コピー・zip 作成を行わない。
-  - `obs-plugin_noise-cancelling-windows-x64-full`: **DLL + presets + models**。`package-windows.ps1 -SkipBuild` で取得・同梱する。
-- DLL のみの artifact を先に upload するため、フルパッケージ作成が失敗しても DLL は取得できる。
+- **DLL だけ欲しいときは `Windows Build (DLL only)` を実行する。** モデル取得・tar.gz 同梱・presets コピー・zip 作成を行わない。
+- `Windows Build (Full package)` は `package-windows.ps1 -SkipBuild` でモデル・presets を同梱し、`obs-plugin_noise-cancelling-windows-x64-full` を出力する。
 - `windows-checks.yml` が fmt / `cargo test -p df-core` / `cargo test -p obs-filter` / clippy を担当する。
 - ローカルの `package-windows.ps1` も従来どおりフルパッケージ zip を作る。
 - `Swatinem/rust-cache@v2`。
@@ -674,7 +674,7 @@ anyhow = "1"
 | AC-15 | モノラル、同一ステレオ、左のみステレオで破綻しない |
 | AC-16 | オフライン WAV レンダラで入出力 WAV を生成できる |
 | AC-17 | macOS arm64 はビルド・起動をベストエフォートで確認する |
-| AC-18 | 外部モデルの DLL ビルドが成立し、Windows CI が DLL のみとフルパッケージの 2 artifact を出力する |
+| AC-18 | 外部モデルの DLL ビルドが成立し、Windows CI が DLL のみとフルパッケージのワークフローを提供する |
 | AC-19 | 低減量・ミックス・モデル・低遅延モードなどが OBS 再起動後も復元される |
 
 ### 9.4 手動確認
@@ -754,7 +754,7 @@ OBS の音声ブロック（約 21 ms）は上記に含まない。いずれも�
 | P3 | パッケージ、CI、README、実機/オフライン確認 | 一部完了。ユーザー環境の OBS でノイズ抑制動作を確認済み。macOS 実機、ユーザー提供 WAV は未 |
 | P4 | 設定復元（`create` で保存設定を読む） | 実装・テスト完了。OBS 再起動での設定復元確認は未 |
 | P5 | ハイブリッド試作（3 点メディアン de-clicker + LSNR 連動 voice protect + `hybrid` プリセット） | 実装・テスト完了。OBS 実機での効果確認は未 |
-| P6 | ビルド整理（埋め込み廃止、Windows CI を DLL のみ＋フルパッケージの 2 artifact とチェック別ワークフローに分割） | 完了 |
+| P6 | ビルド整理（埋め込み廃止、Windows CI を DLL のみ・フルパッケージ・チェックの 3 ワークフローに分割） | 完了 |
 
 - 現在の作業ブランチは `feature/ai-0003-hybrid-prototype`（`feature/ai-0001-noise-cancelling` から派生）。
 - コミットは `AI <ai@example.com>` 名義。
