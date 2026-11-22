@@ -9,7 +9,6 @@
 !/cmake
 !/crates
 !/data
-!/docs
 !/presets
 !/scripts
 !/src
@@ -21,7 +20,6 @@
 
 # Exclude local-only files
 /AGENTS.md
-/docs/proposals/
 /models/
 /third_party/sdk/
 /third_party/df-ffi/target/
@@ -31,6 +29,7 @@
 !.gersemirc
 !.gitignore
 !buildspec.json
+!/DESIGN.md
 !CMakeLists.txt
 !CMakePresets.json
 !LICENSE

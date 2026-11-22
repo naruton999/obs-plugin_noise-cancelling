@@ -239,9 +239,7 @@ obs-plugin_noise-cancelling/
 ├─ models/              # 取得したモデル（git 管理外。実行時に必要）
 ├─ scripts/             # モデル取得
 ├─ build-aux/           # パッケージ
-├─ docs/
-│  ├─ 01-noise-cancelling.md  # 確定仕様
-│  └─ 02-handover.md          # 引き継ぎ資料
+├─ DESIGN.md            # 設計仕様（公開）
 └─ .github/workflows/   # 手動ビルド CI
 ```
 
