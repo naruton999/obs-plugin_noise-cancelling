@@ -48,5 +48,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: obs-plugin_noise-cancelling-windows-x64-full
-          path: dist/windows/obs-plugin_noise-cancelling/
+          path: dist/windows/
           if-no-files-found: error
