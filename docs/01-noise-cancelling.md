@@ -240,33 +240,32 @@ pub struct DenoiseParams { ... }
 
 pub enum ModelKind { LowLatency, Standard }
 
-pub struct EngineConfig {
-    pub model: ModelKind,
-    pub low_latency: bool,
-    pub sample_rate: u32,
-}
-
 pub trait Backend {
     fn sample_rate(&self) -> u32;
     fn hop_size(&self) -> usize;
     fn latency_samples(&self) -> usize;
     fn set_params(&mut self, params: &DenoiseParams);
     fn process_hop(&mut self, input: &[f32], output: &mut [f32]) -> anyhow::Result<()>;
-    fn reset(&mut self);
+    fn reset(&mut self) -> anyhow::Result<()>;
 }
 
-pub struct Denoiser { ... }          // 48 kHz
+pub struct Denoiser { ... }           // 48 kHz
 pub struct ResamplingDenoiser { ... } // 44.1 kHz
-pub enum Engine { Native(Denoiser), Resampled(ResamplingDenoiser) }
+pub enum Engine {
+    Native(Box<Denoiser>),
+    Resampled(Box<ResamplingDenoiser>),
+}
 ```
+
+`Engine::new(backend, sample_rate, max_block)` が 48 kHz / 44.1 kHz を選ぶ。モデルと低遅延モードは `obs-filter` 側のワーカー設定。
 
 ### 5.2 48 kHz `Denoiser`
 
 - `Backend` を所有し、可変長ブロックを `hop` に分割する。
-- `in_fifo` / `out_fifo` / `dry_fifo` は `create` で容量を確保する。音声スレッドでは確保しない。
+- `in_fifo` / `dry_fifo` は `create` で容量を確保する。音声スレッドでは確保しない。
 - `dry_fifo` は `L_dfn` 分遅らせ、DFN 出力と乾音を整列する。
-- 出力が間に合わない場合は同じ遅延の乾音を出し、`underruns` を加算する（無音にしない）。
-- `mix` / `attenuation_limit_db` はサンプル単位または hop 単位でスムージングする。
+- `process(input, output)` は処理済みサンプルを `output` に追記する。出力長は入力長と異なってよい（hop の端数は次回に持ち越す）。OBS 側の出力リングが遅延と端数を吸収する。
+- `mix` / `attenuation_limit_db` は 10〜20 ms でスムージングする。同一パラメータの再設定は無視する。
 - `reset` は FIFO をクリアし、`dry_fifo` を `L_dfn` のゼロで再プライムし、`backend.reset()` を呼ぶ。
 - `enabled=false` は入力コピー。再有効化時は `reset`。
 - `bypass=true` は `mix=0` として遅延乾音を出す。DFN は動かす。
@@ -275,12 +274,11 @@ pub enum Engine { Native(Denoiser), Resampled(ResamplingDenoiser) }
 
 - 入力を `SincFixedIn` で 48 kHz に変換し、`Denoiser` に渡す。
 - `Denoiser` の出力を `SincFixedIn` で 44.1 kHz に戻す。
-- `to_48k` / `from_48k` / `native_out` / `native_dry` の FIFO を持つ。
-- `native_dry` は `L_total` 分遅らせた乾音で、出力不足時のフォールバックに使う。
+- `to_48k` / `from_48k` / `native_in` の FIFO を持つ。
+- `process(input, output)` はネイティブレートの処理済みサンプルを `output` に追記する。出力長は入力長と異なってよい。
 - `latency_samples()` は `up.output_delay()` + `L_dfn` + `down.output_delay()` をネイティブレートに換算して返す。
-- `process()` は入力と同じ長さを出力する。
 - リサンプラの `process_into_buffer` を使い、出力バッファは事前確保する。
-- `reset()` は `Denoiser` と両リサンプラをリセットし、FIFO を再プライムする。
+- `reset()` は `Denoiser` と両リサンプラをリセットする。
 
 ### 5.4 `DfnBackend`
 
@@ -374,21 +372,26 @@ cargo run -p df-core --example render -- \
 
 ```rust
 struct Shared {
-    params: AtomicParams,
-    status: AtomicU32,       // 0=loading, 1=ready, 2=failed, 3=unsupported
-    latency: AtomicU64,      // L_total (native samples)
+    params: AtomicParams,     // settings（model / low_latency / sample_rate を含む）
+    status: AtomicU32,        // 0=loading, 1=ready, 2=failed, 3=unsupported
+    latency: AtomicU64,       // L_total (native samples)
     underruns: AtomicU64,
+    overruns: AtomicU64,
     errors: AtomicU64,
-    sample_rate: AtomicU32,
+    prime_request: AtomicU64, // 出力リング再プライムの世代
+    prime_done: AtomicU64,    // 音声スレッドがドレイン完了した世代
+    primed: AtomicBool,       // プリフィル中/完了。true の間は drain しない
 }
 
 struct AudioSide {
-    in_tx: rtrb::Producer<f32>,
-    out_rx: rtrb::Consumer<f32>,
+    in_tx: Option<rtrb::Producer<f32>>,
+    out_rx: Option<rtrb::Consumer<f32>>,
     mid_dry: DelayLine,
     side_delay: DelayLine,
-    scratch: Vec<f32>,
+    mid_scratch: Vec<f32>,
+    side_scratch: Vec<f32>,
     ready: bool,
+    channels: usize,
 }
 ```
 
@@ -402,18 +405,19 @@ struct AudioSide {
 | `unsupported` | 即時乾音 | 48 kHz / 44.1 kHz が必要 |
 
 - `loading`/`failed`/`unsupported`/`enabled=false` の間、音声スレッドは出力リングをドレインし、`ready=false` にする。
-- `ready` に戻ったら遅延ラインを `L_total` のゼロで再初期化する。
-- 遷移時に 10 ms クロスフェードを入れる。
+- 出力リングの再プライムは `prime_request` / `prime_done` のハンドシェイクで行う。音声スレッドがドレインを完了してからワーカーが `L_worker` のゼロをプリフィルするため、プリフィルを誤って捨てない。
+- `primed=true` の間（プリフィル中/完了後）は音声スレッドは drain しない。`ready` に戻ったら遅延ラインを `L_total` のゼロで再初期化する。
+- v0.1 は遷移時に短い無音/乾音が入る。クリック低減のクロスフェードは v0.2 以降。
 - `enabled=false` → `true` は最大 `L_total` の無音が入る（v0.1 許容）。
 - `destroy` は `stop=true; unpark(); join()`。
 
 ### 6.3 モデル / レート / 低遅延の変更
 
 - `update` は設定を atomic に保存する。
-- ワーカーは `model` / `low_latency` / `sample_rate` の変化を検出したら、状態を `loading` にし、入力リングをドレインし、Engine を作り直す。
-- 新 Engine の `L_total` を計算し、出力リングを `L_worker` のゼロでプリフィルして `ready` にする。
+- ワーカーは `model` / `low_latency` / `sample_rate` の変化を検出したら、状態を `loading` にし、入力リングをドレインし、旧 Engine を drop してから新 Engine を作る。
+- 新 Engine の `L_total` を計算し、`prime_output` ハンドシェイクで出力リングを `L_worker` のゼロでプリフィルして `ready` にする。
 - モデル切替は数秒かかる。切替中は乾音。
-- レートが 48 kHz / 44.1 kHz 以外なら `unsupported`。
+- レートが 48 kHz / 44.1 kHz 以外なら `unsupported`。`active_config` をクリアして、対応レートに戻ったら再ビルドする。
 
 ### 6.4 OBS FFI
 
@@ -519,6 +523,16 @@ ndarray = "0.15"
 anyhow = "1"
 rubato = "0.14"
 
+# deep_filter 0.5.7-pre は tract 0.21.4 API を前提とする。caret 解決で
+# 0.21.19 が選ばれると API 不整合になるため、tract 系を exact pin する。
+tract-core = "=0.21.4"
+tract-data = "=0.21.4"
+tract-hir = "=0.21.4"
+tract-linalg = "=0.21.4"
+tract-nnef = "=0.21.4"
+tract-onnx = "=0.21.4"
+tract-pulse = "=0.21.4"
+
 [dev-dependencies]
 hound = "3.5"
 ```
@@ -529,9 +543,13 @@ hound = "3.5"
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+check-only = []  # Linux などでのローカル型チェック専用
+
 [dependencies]
 df-core = { path = "../df-core" }
 rtrb = "0.3"
+anyhow = "1"
 ```
 
 - モデルは外部ファイル。`default-model-ll` などの埋め込み feature は使わない。
@@ -589,8 +607,8 @@ rtrb = "0.3"
 | `nan_input_is_sanitized` | NaN/Inf で出力が有限 |
 | `reset_clears_state` | リセット後に前の音が残らない |
 | `enabled_is_immediate_passthrough` | `enabled=false` で遅延 0 |
-| `underrun_falls_back_to_dry` | 出力不足時に無音でなく乾音 |
 | `resample_44k_roundtrip` | 44.1k → 48k → 44.1k でサンプル数・波形が破綻しない |
+| `model_kind_ids` | `ll` / `standard` の相互変換 |
 | `stereo_mid_side` | Mid/Side の往復、左右同一、左のみ |
 | `preset_parse_*` | 同梱プリセット、未知フィールド、schema エラー |
 
@@ -641,6 +659,17 @@ rtrb = "0.3"
 10. CPU / メモリを計測。
 11. ユーザー提供のサンプル WAV でオフライン出力を確認。
 
+### 9.5 実装時の実測（2026-11-22）
+
+合成音（トーン＋ノイズ、2 秒）をオフラインレンダラで処理した結果。実機 OBS の最終確認は別途行う。
+
+| 条件 | DSP latency | plugin internal latency | 入力 RMS | 出力 RMS |
+|---|---|---|---|---|
+| LL / 48 kHz / 2 hop / standard | 10.00 ms | 30.00 ms | 0.150076 | 0.054353 |
+| 標準 / 44.1 kHz / 2 hop / standard | 31.36 ms | 51.36 ms | 0.150087 | 0.041440 |
+
+OBS の音声ブロック（約 21 ms）は上記に含まない。いずれも出力が無音にならず、RMS が低下していることを確認した。
+
 ---
 
 ## 10. ライセンス
@@ -669,7 +698,7 @@ rtrb = "0.3"
 | 44.1k リサンプルで遅延/CPU 増 | 低遅延 sinc、実測、低遅延モード |
 | LL モデルの CPU/メモリ | 標準モデルを選択可能。実測して README に記載 |
 | モデル 2 種で配布物が大きい | 外部ファイル。zip/plugin に同梱。README にサイズ記載 |
-| モデル切替中の音切れ | 乾音＋クロスフェード。UI に切替中表示 |
+| モデル切替中の音切れ | 乾音＋短い無音（クロスフェードは v0.2）。UI に切替中表示 |
 | アンダーラン | 2 hop 既定＋乾音フォールバック。1 hop は上級者向け |
 | pre-1.0 API | commit 固定。`dfn.rs` に隔離 |
 | Windows 実機テスト | Windows を最優先。CI と実機で確認 |
@@ -683,10 +712,10 @@ rtrb = "0.3"
 
 | フェーズ | 内容 | 状態 |
 |---|---|---|
-| P0 | 仕様、ブランチ、workspace、LICENSE、NOTICES、.gitignore、handoff 移動 | 実施中 |
-| P1 | `df-core`（Backend、Denoiser、Resampling、Preset、Mock テスト、WAV レンダラ） | 未 |
-| P2 | `obs-filter`（FFI、worker、UI、models、presets） | 未 |
-| P3 | パッケージ、CI、README、実機/オフライン確認 | 未 |
+| P0 | 仕様、ブランチ、workspace、LICENSE、NOTICES、.gitignore、handoff 移動 | 完了 |
+| P1 | `df-core`（Backend、Denoiser、Resampling、Preset、Mock テスト、WAV レンダラ） | 完了。LL 48 kHz / 標準 44.1 kHz の実モデルで WAV 出力を確認 |
+| P2 | `obs-filter`（FFI、worker、UI、models、presets） | 完了。Linux `check-only` で型チェック・clippy 済み |
+| P3 | パッケージ、CI、README、実機/オフライン確認 | 一部完了。Windows/macOS 実機ビルド、OBS 実機、ユーザー提供 WAV の確認は未 |
 
 - ブランチは `feature/ai-0001-noise-cancelling`。完了までこのブランチで作業する。
 - コミットは `AI <ai@example.com>` 名義。
