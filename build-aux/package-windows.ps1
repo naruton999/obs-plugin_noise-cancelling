@@ -7,7 +7,9 @@ param(
 
     [switch] $SkipBuild,
 
-    [switch] $EmbedModels
+    [switch] $EmbedModels,
+
+    [switch] $DllOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -40,6 +42,17 @@ if (-not $SkipBuild) {
 $Dll = Join-Path $Root "target/$Target/$ProfileDir/obs_filter.dll"
 if (-not (Test-Path $Dll)) {
     throw "DLL not found: $Dll"
+}
+
+if ($DllOnly) {
+    $OutDir = Join-Path $Root 'dist/windows'
+    if (Test-Path $OutDir) {
+        Remove-Item -Recurse -Force $OutDir
+    }
+    New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+    Copy-Item $Dll (Join-Path $OutDir "$ModuleName.dll") -Force
+    Write-Host "created $OutDir/$ModuleName.dll (DLL only, no models/presets/zip)"
+    return
 }
 
 $ModelsDir = Join-Path $Root 'models'

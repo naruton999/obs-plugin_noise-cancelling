@@ -7,6 +7,10 @@ on:
         description: "Embed both DeepFilterNet models in the DLL"
         type: boolean
         default: false
+      dll_only:
+        description: "Upload only the DLL (no presets/models/zip)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -46,6 +50,7 @@ jobs:
         run: cargo clippy -p obs-filter --all-targets --target x86_64-pc-windows-msvc -- -D warnings
 
       - name: Fetch models
+        if: ${{ inputs.embed_models || !inputs.dll_only }}
         run: ./scripts/fetch-models.ps1
 
       - name: Build release DLL
@@ -60,11 +65,12 @@ jobs:
       - name: Package
         run: |
           $embedModels = '${{ inputs.embed_models }}' -eq 'true'
-          ./build-aux/package-windows.ps1 -Configuration Release -SkipBuild -EmbedModels:$embedModels
+          $dllOnly = '${{ inputs.dll_only }}' -eq 'true'
+          ./build-aux/package-windows.ps1 -Configuration Release -SkipBuild -EmbedModels:$embedModels -DllOnly:$dllOnly
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: obs-plugin_noise-cancelling-windows-x64
+          name: obs-plugin_noise-cancelling-windows-x64${{ inputs.dll_only && '-dll-only' || '' }}
           path: dist/windows/
           if-no-files-found: error
