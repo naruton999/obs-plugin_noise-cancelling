@@ -2,6 +2,11 @@ name: macOS Build
 
 on:
   workflow_dispatch:
+    inputs:
+      embed_models:
+        description: "Embed both DeepFilterNet models in the plugin"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -44,6 +49,8 @@ jobs:
         run: ./scripts/fetch-models.sh
 
       - name: Package
+        env:
+          EMBED_MODELS: ${{ inputs.embed_models && '1' || '0' }}
         run: ./build-aux/package-macos.sh
 
       - name: Check architecture
